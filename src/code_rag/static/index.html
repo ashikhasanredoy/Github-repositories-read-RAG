@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Code RAG</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <h1>Code RAG</h1>
+            </div>
+
+            <div class="status-box" id="statusBox">
+                <span class="status-dot online" id="statusDot"></span>
+                <span id="statusText">Connected</span>
+            </div>
+
+            <div class="field-group">
+                <label>Ingest Repository</label>
+                <form id="ingestForm">
+                    <input type="text" id="repoSourceInput" class="input" placeholder="GitHub URL or local path" required />
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="forceReindexCheckbox" id="forceCheck">
+                        <label for="forceCheck">Force Re-index</label>
+                    </div>
+                    <button type="submit" id="ingestBtn" class="btn btn-primary">
+                        <span id="ingestBtnText">Index Repository</span>
+                        <span id="ingestSpinner" class="spinner" style="display: none;"></span>
+                    </button>
+                </form>
+                <div id="ingestAlert" class="alert" style="display: none;"></div>
+            </div>
+
+            <div class="field-group">
+                <label>Active Repository</label>
+                <select id="repoSelect" class="input select">
+                    <option value="">No repositories indexed</option>
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label>Model</label>
+                <select id="modelSelect" class="input select">
+                    <option value="">Loading models...</option>
+                </select>
+            </div>
+        </aside>
+
+        <!-- Main Chat -->
+        <main class="main">
+            <header class="header">
+                <h2>Codebase Assistant</h2>
+                <p>Ask questions about architecture, functions, and logic with exact file and line references.</p>
+            </header>
+
+            <div class="quick-queries">
+                <button class="q-btn" data-query="Where is the prediction API implemented?">Prediction API</button>
+                <button class="q-btn" data-query="Explain the pipeline workflow and how data flows.">Pipeline Flow</button>
+                <button class="q-btn" data-query="Which function handles authentication or security?">Auth & Security</button>
+            </div>
+
+            <div class="chat" id="chatContainer">
+                <div class="msg bot">
+                    <div class="msg-content">
+                        <p>Welcome! Index a repository from the sidebar to start asking questions about its code.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-bar">
+                <form id="queryForm" class="query-box">
+                    <input 
+                        type="text" 
+                        id="queryInput" 
+                        class="query-input" 
+                        placeholder="Ask a question about the codebase..." 
+                        autocomplete="off"
+                        required
+                    />
+                    <button type="submit" id="sendBtn" class="btn-submit">Send</button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
