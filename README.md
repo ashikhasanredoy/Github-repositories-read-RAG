@@ -231,25 +231,9 @@ git read RAG/
 │           ├── index.html       # Clean web interface
 │           ├── styles.css       # Warm editorial aesthetic stylesheet
 │           └── app.js           # Client UI logic & Prism syntax highlighting
-├── tests/
-│   ├── sample_repo/             # Mock repository for end-to-end testing
-│   ├── test_api.py              # FastAPI endpoint tests
-│   ├── test_parser.py           # AST parser & chunker tests
-│   ├── test_retriever.py        # Hybrid RRF retriever tests
-│   └── test_end_to_end.py       # Full pipeline integration tests
 ├── requirements.txt             # Python dependencies
 ├── run.py                       # Server entrypoint launcher
 └── README.md                    # Project documentation
-```
-
----
-
-## 🧪 Testing
-
-Run the automated test suite with `pytest`:
-
-```bash
-PYTHONPATH=. pytest -v
 ```
 
 ---
