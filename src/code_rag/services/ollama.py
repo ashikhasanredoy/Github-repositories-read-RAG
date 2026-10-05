@@ -136,6 +136,8 @@ class OllamaService:
                                     try:
                                         chunk = json.loads(line)
                                         yield chunk.get("response", "")
+                                        if chunk.get("done", False):
+                                            break
                                     except Exception:
                                         pass
                         return
@@ -148,5 +150,7 @@ class OllamaService:
                         try:
                             chunk = json.loads(line)
                             yield chunk.get("response", "")
+                            if chunk.get("done", False):
+                                break
                         except Exception:
                             pass

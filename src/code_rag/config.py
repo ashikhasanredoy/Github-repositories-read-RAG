@@ -20,27 +20,32 @@ class Settings(BaseSettings):
     CHROMA_DIR: Path = DATA_DIR / "chroma_db"
     BM25_DIR: Path = DATA_DIR / "bm25_indices"
 
-    MAX_FILE_SIZE_KB: int = 300
-    MAX_CHUNK_CHARS: int = 2000
+    MAX_FILE_SIZE_KB: int = 500
+    MAX_CHUNK_CHARS: int = 2500
     SUPPORTED_EXTENSIONS: Set[str] = {
         ".py", ".js", ".ts", ".jsx", ".tsx",
+        ".html", ".css", ".json", ".xml", ".txt", ".csv",
         ".java", ".cpp", ".c", ".h", ".hpp",
-        ".go", ".rs", ".rb", ".php",
-        ".md", ".yaml", ".yml", ".toml", ".sql", ".sh"
+        ".go", ".rs", ".rb", ".php", ".cs", ".swift", ".kt", ".dart", ".scala", ".lua",
+        ".md", ".yaml", ".yml", ".toml", ".sql", ".sh", ".dockerfile", ".env"
+    }
+    SPECIAL_FILENAMES: Set[str] = {
+        "dockerfile", "makefile", "jenkinsfile", "requirements.txt",
+        ".gitignore", ".dockerignore", "gemfile", "procfile", "caddyfile"
     }
     IGNORE_DIRS: Set[str] = {
         ".git", ".github", "node_modules", "venv", ".venv", "env",
-        "__pycache__", "dist", "build", "target", ".next", ".cache",
-        "vendor", "coverage", ".pytest_cache", ".idea", ".vscode"
+        "__pycache__", "dist", "build", ".next", ".cache",
+        "coverage", ".pytest_cache", ".idea", ".vscode"
     }
     IGNORE_FILES: Set[str] = {
         "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
         "poetry.lock", "Pipfile.lock", "Cargo.lock"
     }
 
-    VECTOR_TOP_K: int = 6
-    BM25_TOP_K: int = 6
-    FINAL_TOP_K: int = 3
+    VECTOR_TOP_K: int = 10
+    BM25_TOP_K: int = 10
+    FINAL_TOP_K: int = 6
     RRF_K: int = 60
 
     model_config = SettingsConfigDict(

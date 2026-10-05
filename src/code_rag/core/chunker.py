@@ -9,9 +9,12 @@ class CodeChunker:
     LANGUAGE_MAP = {
         ".py": "python", ".js": "javascript", ".jsx": "javascript",
         ".ts": "typescript", ".tsx": "typescript", ".go": "go",
-        ".java": "java", ".cpp": "cpp", ".c": "c", ".rs": "rust",
-        ".rb": "ruby", ".php": "php", ".md": "markdown",
-        ".yaml": "yaml", ".yml": "yaml", ".toml": "toml", ".sql": "sql", ".sh": "bash"
+        ".java": "java", ".cpp": "cpp", ".c": "c", ".h": "c", ".hpp": "cpp",
+        ".rs": "rust", ".rb": "ruby", ".php": "php", ".md": "markdown",
+        ".yaml": "yaml", ".yml": "yaml", ".toml": "toml", ".sql": "sql", ".sh": "bash",
+        ".html": "html", ".css": "css", ".json": "json", ".xml": "xml",
+        ".cs": "csharp", ".swift": "swift", ".kt": "kotlin", ".dart": "dart",
+        ".scala": "scala", ".lua": "lua", ".env": "ini", ".dockerfile": "dockerfile"
     }
 
     def __init__(self, parser: Optional[CodeParser] = None, max_chunk_chars: int = settings.MAX_CHUNK_CHARS):
@@ -23,8 +26,40 @@ class CodeChunker:
         files = self.parser.scan_repository(str(root))
         chunks: List[CodeChunk] = []
 
+        if not files:
+            return []
+
+        # 1. Generate repository directory structure & file map overview
+        dir_tree_lines = ["# Repository File Tree & Directory Map\n"]
+        for f in sorted(files):
+            rel = str(f.relative_to(root))
+            dir_tree_lines.append(f"- {rel}")
+
+        dir_tree_content = "\n".join(dir_tree_lines)
+        chunks.append(CodeChunk(
+            chunk_id=f"{repo_id}_file_tree",
+            repo_id=repo_id,
+            rel_path="REPOSITORY_STRUCTURE.md",
+            language="markdown",
+            symbol_name="repository_file_tree",
+            symbol_type="overview",
+            start_line=1,
+            end_line=len(files),
+            code_content=dir_tree_content[:self.max_chunk_chars],
+            formatted_content=(
+                f"File: REPOSITORY_STRUCTURE.md\n"
+                f"Directory: /\n"
+                f"Language: markdown\n"
+                f"Symbol: repository_file_tree (overview)\n\n"
+                f"{dir_tree_content[:self.max_chunk_chars]}"
+            ),
+            docstring="Complete list of all files and folders in this repository."
+        ))
+
+        # 2. Chunk every file in root and all subdirectories
         for file_path in files:
             rel_path = str(file_path.relative_to(root))
+            parent_dir = str(file_path.relative_to(root).parent)
             lang = self.LANGUAGE_MAP.get(file_path.suffix.lower(), "text")
             symbols = self.parser.parse_file(file_path, root)
 
@@ -32,11 +67,11 @@ class CodeChunker:
                 if not sym.content.strip():
                     continue
 
-                # Truncate content to safe character length for embeddings
                 clean_content = sym.content[:self.max_chunk_chars]
 
                 header = (
                     f"File: {rel_path}\n"
+                    f"Directory: {parent_dir}\n"
                     f"Language: {lang}\n"
                     f"Symbol: {sym.name} ({sym.symbol_type})\n"
                     f"Lines: {sym.start_line}-{sym.end_line}\n\n"
@@ -62,3 +97,4 @@ class CodeChunker:
                 ))
 
         return chunks
+

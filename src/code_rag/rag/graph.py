@@ -2,6 +2,7 @@ import re
 import logging
 from typing import Dict, Any, List, Optional
 from langgraph.graph import StateGraph, END
+from src.code_rag.config import settings
 from src.code_rag.rag.state import CodeRAGState
 from src.code_rag.rag.retriever import HybridRetriever
 from src.code_rag.services.ollama import OllamaService
@@ -51,7 +52,7 @@ class CodeRAGGraph:
         docs = self.retriever.retrieve(
             repo_id=state["repo_id"],
             query=state["question"],
-            top_k=3
+            top_k=settings.FINAL_TOP_K
         )
         context = self.retriever.build_context(docs)
         trace.append(f"Retrieved {len(docs)} chunks")
