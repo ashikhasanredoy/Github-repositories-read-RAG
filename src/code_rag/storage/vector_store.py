@@ -31,14 +31,9 @@ class VectorStore:
             return 0
 
         coll_name = self._sanitize_collection_name(repo_id)
-        try:
-            self.client.delete_collection(name=coll_name)
-        except Exception:
-            pass
-
-        collection = self.client.create_collection(
+        collection = self.client.get_or_create_collection(
             name=coll_name,
-            metadata={"hnsw:space": "cosine", "repo_id": repo_id}
+            metadata={"hnsw:space": "cosine", "repo_id": repo_id.lower()}
         )
 
         texts = [c.formatted_content for c in chunks]
@@ -48,7 +43,7 @@ class VectorStore:
 
         batch_size = 64
         for i in range(0, len(chunks), batch_size):
-            collection.add(
+            collection.upsert(
                 ids=ids[i:i + batch_size],
                 embeddings=embeddings[i:i + batch_size],
                 documents=texts[i:i + batch_size],
@@ -93,3 +88,13 @@ class VectorStore:
             c.name[5:] for c in self.client.list_collections()
             if c.name.startswith("repo_")
         ]
+
+    def delete_repo(self, repo_id: str) -> bool:
+        coll_name = self._sanitize_collection_name(repo_id)
+        try:
+            self.client.delete_collection(name=coll_name)
+            logger.info("Successfully deleted vector collection: %s", coll_name)
+            return True
+        except Exception as e:
+            logger.warning("Failed to delete vector collection %s: %s", coll_name, e)
+            return False

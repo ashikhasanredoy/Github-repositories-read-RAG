@@ -21,7 +21,7 @@ class RepoCloner:
         clean = clean.rstrip("/")
         name = clean.split("/")[-1]
         name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
-        name = name.strip("._-")
+        name = name.strip("._-").lower()
         return name or "repo"
 
     def clone_or_load(self, source: str, force_reclone: bool = False) -> Dict[str, Any]:
@@ -60,3 +60,16 @@ class RepoCloner:
             "is_remote": True,
             "local_path": str(target_path)
         }
+
+    def delete_repo(self, repo_id: str) -> bool:
+        clean_name = self.sanitize_repo_name(repo_id)
+        target_path = self.repos_dir / clean_name
+        if target_path.exists() and target_path.is_dir():
+            try:
+                shutil.rmtree(target_path, ignore_errors=True)
+                logger.info("Successfully deleted cloned repo directory: %s", target_path)
+                return True
+            except Exception as err:
+                logger.warning("Failed to remove cloned repo directory %s: %s", target_path, err)
+                return False
+        return False

@@ -25,8 +25,17 @@ class OllamaService:
             with httpx.Client(timeout=4.0) as client:
                 res = client.get(f"{self.base_url}/api/tags")
                 if res.status_code == 200:
-                    models = [m["name"] for m in res.json().get("models", [])]
-                    return [m for m in models if "embed" not in m]
+                    raw_models = res.json().get("models", [])
+                    models = []
+                    for m in raw_models:
+                        caps = m.get("details", {}).get("families", []) or m.get("capabilities", [])
+                        name = m.get("name", "")
+                        if "capabilities" in m and "completion" not in m["capabilities"]:
+                            continue
+                        if any(k in name.lower() for k in ["embed", "minilm", "bge", "bert"]):
+                            continue
+                        models.append(name)
+                    return models if models else [m.get("name", "") for m in raw_models]
         except Exception:
             pass
         return []

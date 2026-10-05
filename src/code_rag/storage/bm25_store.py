@@ -41,12 +41,14 @@ class BM25Store:
             ]
         }
 
-        save_path = self.storage_dir / f"{repo_id}.pkl"
+        clean_id = repo_id.lower()
+        save_path = self.storage_dir / f"{clean_id}.pkl"
         save_path.write_bytes(pickle.dumps(payload))
         return True
 
     def search(self, repo_id: str, query: str, top_k: int = settings.BM25_TOP_K) -> List[Dict[str, Any]]:
-        index_file = self.storage_dir / f"{repo_id}.pkl"
+        clean_id = repo_id.lower()
+        index_file = self.storage_dir / f"{clean_id}.pkl"
         if not index_file.exists():
             return []
 
@@ -79,3 +81,16 @@ class BM25Store:
                 })
 
         return matched
+
+    def delete_repo(self, repo_id: str) -> bool:
+        clean_id = repo_id.lower()
+        save_path = self.storage_dir / f"{clean_id}.pkl"
+        if save_path.exists():
+            try:
+                save_path.unlink()
+                logger.info("Successfully deleted BM25 index file: %s", save_path)
+                return True
+            except Exception as e:
+                logger.warning("Failed to delete BM25 index %s: %s", save_path, e)
+                return False
+        return False

@@ -10,7 +10,7 @@ from src.code_rag.config import settings
 from src.code_rag.api.schemas import (
     IndexRepoRequest, IndexRepoResponse,
     QueryRequest, QueryResponse, SourceCitation,
-    RepoListResponse
+    RepoListResponse, DeleteRepoResponse
 )
 from src.code_rag.core.cloner import RepoCloner
 from src.code_rag.core.parser import CodeParser
@@ -57,7 +57,14 @@ rag_pipeline = rag_graph.build()
 async def serve_ui():
     index_file = STATIC_DIR / "index.html"
     if index_file.exists():
-        return FileResponse(index_file)
+        return FileResponse(
+            index_file,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
     return {
         "status": "healthy",
         "service": settings.PROJECT_NAME,
@@ -198,3 +205,23 @@ def query_repository_stream(req: QueryRequest):
 async def list_repositories():
     repos = await asyncio.to_thread(vector_store.list_repos)
     return RepoListResponse(repos=repos, count=len(repos))
+
+@app.delete("/api/repos/{repo_id}", response_model=DeleteRepoResponse, tags=["Repositories"])
+async def delete_repository(repo_id: str):
+    try:
+        def _delete_job():
+            v_del = vector_store.delete_repo(repo_id)
+            b_del = bm25_store.delete_repo(repo_id)
+            c_del = cloner.delete_repo(repo_id)
+            return v_del or b_del or c_del
+
+        await asyncio.to_thread(_delete_job)
+        return DeleteRepoResponse(
+            repo_id=repo_id,
+            status="deleted",
+            message=f"Repository '{repo_id}' removed from vector database, BM25 index, and disk storage."
+        )
+    except Exception as err:
+        logger.error("Error deleting repository %s: %s", repo_id, err)
+        raise HTTPException(status_code=500, detail=str(err))
+

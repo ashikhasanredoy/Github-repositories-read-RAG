@@ -40,3 +40,8 @@ class QueryResponse(BaseModel):
 class RepoListResponse(BaseModel):
     repos: List[str]
     count: int
+
+class DeleteRepoResponse(BaseModel):
+    repo_id: str
+    status: str
+    message: str
