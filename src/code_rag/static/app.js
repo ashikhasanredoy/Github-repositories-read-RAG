@@ -514,14 +514,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch("/api/health");
             if (res.ok) {
                 const data = await res.json();
-                statusDot.className = "status-indicator online";
-                statusText.textContent = `Online (${data.active_llm || "Ready"})`;
+                if (statusDot) statusDot.className = "status-indicator online";
+                if (statusText) statusText.textContent = `Online (${data.active_llm || "Ready"})`;
             } else {
                 throw new Error();
             }
         } catch {
-            statusDot.className = "status-indicator offline";
-            statusText.textContent = "Offline (Check Ollama)";
+            if (statusDot) statusDot.className = "status-indicator offline";
+            if (statusText) statusText.textContent = "Offline (Check Ollama)";
         }
     }
 
