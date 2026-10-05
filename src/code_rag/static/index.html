@@ -242,14 +242,13 @@
 
             <!-- Input Bar -->
             <div class="input-container">
-                <form id="queryForm" class="chat-input-form">
+                <form id="queryForm" class="chat-input-form" novalidate onsubmit="return false;">
                     <div class="input-box-glow">
                         <textarea 
                             id="queryInput" 
                             class="chat-textarea" 
                             placeholder="Ask any question about the indexed codebase... (Press Enter to send, Shift+Enter for newline)" 
                             rows="1"
-                            required
                         ></textarea>
                         
                         <div class="input-actions">
@@ -257,7 +256,7 @@
                                 <span class="repo-badge-dot"></span>
                                 <span id="inputRepoLabel">No Repo Selected</span>
                             </div>
-                            <button type="submit" id="sendBtn" class="send-btn" title="Send Question (Enter)">
+                            <button type="button" id="sendBtn" class="send-btn" title="Send Question (Enter)">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                     <line x1="22" y1="2" x2="11" y2="13"></line>
                                     <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -278,6 +277,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
-    <script src="/static/app.js?v=10.0"></script>
+    <script src="/static/app.js?v=11.0"></script>
 </body>
 </html>

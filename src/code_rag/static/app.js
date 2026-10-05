@@ -311,14 +311,24 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Auto-expand textarea
-        queryInput.addEventListener("input", autoResizeTextarea);
-        queryInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+        // Auto-expand textarea and Enter key submission
+        if (queryInput) {
+            queryInput.addEventListener("input", autoResizeTextarea);
+            queryInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    submitUserQuery();
+                }
+            });
+        }
+
+        // Send Button Click
+        if (sendBtn) {
+            sendBtn.addEventListener("click", (e) => {
                 e.preventDefault();
-                queryForm.dispatchEvent(new Event("submit"));
-            }
-        });
+                submitUserQuery();
+            });
+        }
 
         // Clear chat (resets active conversation)
         if (clearChatBtn) {
@@ -642,20 +652,41 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Query Submission & Streaming
-    queryForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
+    if (queryForm) {
+        queryForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            submitUserQuery();
+        });
+    }
+
+    async function submitUserQuery() {
         if (isSubmitting) return;
 
         const q = queryInput.value.trim();
-        const repo = repoSelect.value;
-        const model = (modelSelect && modelSelect.value) ? modelSelect.value : (currentModel || "");
+        if (!q) {
+            queryInput.focus();
+            return;
+        }
 
-        if (!q) return;
+        let repo = repoSelect ? repoSelect.value : "";
+        if (!repo && repoSelect && repoSelect.options && repoSelect.options.length > 0) {
+            for (let i = 0; i < repoSelect.options.length; i++) {
+                if (repoSelect.options[i].value) {
+                    repoSelect.selectedIndex = i;
+                    repo = repoSelect.options[i].value;
+                    updateSelectedRepoUI();
+                    break;
+                }
+            }
+        }
+
         if (!repo) {
-            showToast("Please index and select a repository first.", "warning");
+            showToast("Please index or select a target repository first from the sidebar.", "warning", 3500);
             if (repoSourceInput) repoSourceInput.focus();
             return;
         }
+
+        const model = (modelSelect && modelSelect.value) ? modelSelect.value : (currentModel || "llama3.2:latest");
 
         // Hide welcome hero when conversation begins
         if (welcomeHero && welcomeHero.parentNode === chatContainer) {
@@ -679,7 +710,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const contentEl = botMsg.querySelector(".msg-bubble");
 
         isSubmitting = true;
-        sendBtn.disabled = true;
+        if (sendBtn) sendBtn.disabled = true;
 
         let accumulatedAnswer = "";
         let sources = [];
@@ -771,10 +802,10 @@ document.addEventListener("DOMContentLoaded", () => {
             showToast(err.message, "error");
         } finally {
             isSubmitting = false;
-            sendBtn.disabled = false;
+            if (sendBtn) sendBtn.disabled = false;
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
-    });
+    }
 
     // =========================================================================
     // Rendering & Helpers
