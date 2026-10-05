@@ -13,6 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const ingestBtnText = document.getElementById("ingestBtnText");
     const ingestSpinner = document.getElementById("ingestSpinner");
     const ingestAlert = document.getElementById("ingestAlert");
+    const newChatBtn = document.getElementById("newChatBtn");
+    const conversationsList = document.getElementById("conversationsList");
     const repoSelect = document.getElementById("repoSelect");
     const deleteRepoBtn = document.getElementById("deleteRepoBtn");
     const modelSelect = document.getElementById("modelSelect");
@@ -37,6 +39,8 @@ document.addEventListener("DOMContentLoaded", () => {
         : ".";
 
     let isSubmitting = false;
+    let conversations = [];
+    let activeConvId = null;
     let chatHistory = [];
 
     // Initialize application
@@ -45,58 +49,222 @@ document.addEventListener("DOMContentLoaded", () => {
     async function init() {
         setupTheme();
         setupEventListeners();
-        restoreChatHistory();
+        loadConversationsFromMemory();
         await checkStatus();
         await loadModels();
         await loadRepos();
     }
 
     // =========================================================================
-    // Chat Persistence (Keeps active chat page after refresh)
+    // Long-Term Multi-Conversation Memory Management
     // =========================================================================
-    function saveChatHistory() {
+    function loadConversationsFromMemory() {
         try {
-            localStorage.setItem("coderag_chat_history", JSON.stringify(chatHistory));
+            const savedConvs = localStorage.getItem("coderag_conversations");
+            if (savedConvs) {
+                const parsed = JSON.parse(savedConvs);
+                if (Array.isArray(parsed)) {
+                    conversations = parsed;
+                }
+            }
+
+            // Migration from legacy single-chat history if exists
+            const legacyHistory = localStorage.getItem("coderag_chat_history");
+            if (legacyHistory && conversations.length === 0) {
+                try {
+                    const parsedHist = JSON.parse(legacyHistory);
+                    if (Array.isArray(parsedHist) && parsedHist.length > 0) {
+                        const firstQ = parsedHist.find(m => m.type === "user");
+                        const title = firstQ ? firstQ.text.slice(0, 32) : "Initial Conversation";
+                        const legacyConv = {
+                            id: "conv_" + Date.now(),
+                            title: title,
+                            timestamp: Date.now(),
+                            repo: localStorage.getItem("coderag_selected_repo") || "",
+                            model: localStorage.getItem("coderag_selected_model") || "",
+                            messages: parsedHist
+                        };
+                        conversations = [legacyConv];
+                        saveConversationsToMemory();
+                    }
+                } catch {
+                    // Ignore legacy parse failure
+                }
+            }
+
+            activeConvId = localStorage.getItem("coderag_active_conv_id");
+            if (!activeConvId && conversations.length > 0) {
+                activeConvId = conversations[0].id;
+            }
+
+            restoreActiveChatUI();
+            renderConversationsList();
         } catch (err) {
-            console.warn("Unable to save chat to localStorage:", err);
+            console.error("Error loading conversation memory:", err);
+            startNewConversation(false);
         }
     }
 
-    function restoreChatHistory() {
+    function saveConversationsToMemory() {
         try {
-            const saved = localStorage.getItem("coderag_chat_history");
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    chatHistory = parsed;
-                    chatContainer.innerHTML = "";
-
-                    chatHistory.forEach(item => {
-                        if (item.type === "user") {
-                            appendMsg("user", escapeHtml(item.text));
-                        } else if (item.type === "bot") {
-                            const row = appendMsg("bot", "");
-                            const bubble = row.querySelector(".msg-bubble");
-                            const textDiv = document.createElement("div");
-                            textDiv.className = "markdown-body";
-                            renderMarkdown(textDiv, item.text || "");
-                            bubble.appendChild(textDiv);
-                            renderExtras(bubble, item.sources || [], item.traceSteps || []);
-                        }
-                    });
-
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    return;
-                }
+            localStorage.setItem("coderag_conversations", JSON.stringify(conversations));
+            if (activeConvId) {
+                localStorage.setItem("coderag_active_conv_id", activeConvId);
+            } else {
+                localStorage.removeItem("coderag_active_conv_id");
             }
         } catch (err) {
-            console.error("Error restoring chat history:", err);
+            console.warn("Unable to save conversations to memory:", err);
+        }
+    }
+
+    function startNewConversation(shouldToast = true) {
+        activeConvId = "conv_" + Date.now();
+        chatHistory = [];
+        saveConversationsToMemory();
+        restoreActiveChatUI();
+        renderConversationsList();
+        if (shouldToast) {
+            showToast("New conversation started", "info", 2000);
+        }
+    }
+
+    function selectConversation(convId) {
+        if (activeConvId === convId) return;
+        activeConvId = convId;
+        saveConversationsToMemory();
+        restoreActiveChatUI();
+        renderConversationsList();
+    }
+
+    function deleteConversation(convId, e) {
+        if (e) e.stopPropagation();
+        const idx = conversations.findIndex(c => c.id === convId);
+        if (idx !== -1) {
+            const deletedTitle = conversations[idx].title || "Conversation";
+            conversations.splice(idx, 1);
+            if (activeConvId === convId) {
+                if (conversations.length > 0) {
+                    activeConvId = conversations[0].id;
+                } else {
+                    activeConvId = "conv_" + Date.now();
+                }
+            }
+            saveConversationsToMemory();
+            restoreActiveChatUI();
+            renderConversationsList();
+            showToast(`Deleted "${deletedTitle}"`, "info", 2500);
+        }
+    }
+
+    function restoreActiveChatUI() {
+        chatContainer.innerHTML = "";
+        const currentConv = conversations.find(c => c.id === activeConvId);
+        chatHistory = currentConv ? (currentConv.messages || []) : [];
+
+        if (chatHistory.length > 0) {
+            chatHistory.forEach(item => {
+                if (item.type === "user") {
+                    appendMsg("user", escapeHtml(item.text));
+                } else if (item.type === "bot") {
+                    const row = appendMsg("bot", "");
+                    const bubble = row.querySelector(".msg-bubble");
+                    const textDiv = document.createElement("div");
+                    textDiv.className = "markdown-body";
+                    renderMarkdown(textDiv, item.text || "");
+                    bubble.appendChild(textDiv);
+                    renderExtras(bubble, item.sources || [], item.traceSteps || []);
+                }
+            });
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        } else {
+            if (welcomeHero) {
+                chatContainer.appendChild(welcomeHero);
+            }
+        }
+    }
+
+    function renderConversationsList() {
+        if (!conversationsList) return;
+        conversationsList.innerHTML = "";
+
+        if (conversations.length === 0) {
+            conversationsList.innerHTML = `<div class="conversations-empty">No previous chats yet</div>`;
+            return;
         }
 
-        // Default empty state if no active chat
-        if (welcomeHero) {
-            chatContainer.innerHTML = "";
-            chatContainer.appendChild(welcomeHero);
+        // Sort latest first
+        const sorted = [...conversations].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        sorted.forEach(c => {
+            const item = document.createElement("div");
+            item.className = `conv-item ${c.id === activeConvId ? "active" : ""}`;
+            const displayTitle = c.title || "New Chat";
+
+            item.innerHTML = `
+                <div class="conv-main">
+                    <span class="conv-icon">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    </span>
+                    <span class="conv-title" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</span>
+                </div>
+                <button type="button" class="btn-delete-conv" title="Delete conversation">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+            `;
+
+            item.addEventListener("click", () => selectConversation(c.id));
+            const delBtn = item.querySelector(".btn-delete-conv");
+            delBtn.addEventListener("click", (e) => deleteConversation(c.id, e));
+
+            conversationsList.appendChild(item);
+        });
+    }
+
+    function recordUserMessageInConversation(text) {
+        if (!activeConvId) {
+            activeConvId = "conv_" + Date.now();
+        }
+
+        let conv = conversations.find(c => c.id === activeConvId);
+        if (!conv) {
+            conv = {
+                id: activeConvId,
+                title: text.slice(0, 36) + (text.length > 36 ? "..." : ""),
+                timestamp: Date.now(),
+                repo: repoSelect.value || "",
+                model: modelSelect.value || "",
+                messages: []
+            };
+            conversations.unshift(conv);
+        } else {
+            conv.timestamp = Date.now();
+            conv.repo = repoSelect.value || conv.repo;
+            conv.model = modelSelect.value || conv.model;
+            if (!conv.title || conv.title === "New Chat" || conv.messages.length === 0) {
+                conv.title = text.slice(0, 36) + (text.length > 36 ? "..." : "");
+            }
+        }
+
+        conv.messages.push({ type: "user", text: text });
+        chatHistory = conv.messages;
+        saveConversationsToMemory();
+        renderConversationsList();
+    }
+
+    function recordBotMessageInConversation(text, sources, traceSteps) {
+        let conv = conversations.find(c => c.id === activeConvId);
+        if (conv) {
+            conv.timestamp = Date.now();
+            conv.messages.push({
+                type: "bot",
+                text: text,
+                sources: sources || [],
+                traceSteps: traceSteps || []
+            });
+            chatHistory = conv.messages;
+            saveConversationsToMemory();
+            renderConversationsList();
         }
     }
 
@@ -104,6 +272,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Event Listeners & UI Helpers
     // =========================================================================
     function setupEventListeners() {
+        // New Conversation Button
+        if (newChatBtn) {
+            newChatBtn.addEventListener("click", () => {
+                startNewConversation(true);
+            });
+        }
         // Quick suggestions chips
         document.querySelectorAll(".q-chip").forEach(chip => {
             chip.addEventListener("click", () => {
@@ -143,16 +317,22 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
-        // Clear chat (resets to initial welcome page)
+        // Clear chat (resets active conversation)
         if (clearChatBtn) {
             clearChatBtn.addEventListener("click", () => {
-                chatHistory = [];
-                localStorage.removeItem("coderag_chat_history");
+                if (activeConvId) {
+                    const conv = conversations.find(c => c.id === activeConvId);
+                    if (conv) {
+                        conv.messages = [];
+                    }
+                    chatHistory = [];
+                    saveConversationsToMemory();
+                }
                 chatContainer.innerHTML = "";
                 if (welcomeHero) {
                     chatContainer.appendChild(welcomeHero);
                 }
-                showToast("Chat cleared and returned to home screen", "info");
+                showToast("Active conversation cleared", "info", 2000);
             });
         }
 
@@ -471,10 +651,9 @@ document.addEventListener("DOMContentLoaded", () => {
             welcomeHero.remove();
         }
 
-        // Append User Message and persist to history
+        // Append User Message and persist to conversation memory
         appendMsg("user", escapeHtml(q));
-        chatHistory.push({ type: "user", text: q });
-        saveChatHistory();
+        recordUserMessageInConversation(q);
 
         queryInput.value = "";
         queryInput.style.height = "auto";
@@ -566,15 +745,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             renderExtras(contentEl, sources, traceSteps);
 
-            // Persist bot message to history
+            // Persist bot message to active conversation
             if (accumulatedAnswer) {
-                chatHistory.push({
-                    type: "bot",
-                    text: accumulatedAnswer,
-                    sources: sources,
-                    traceSteps: traceSteps
-                });
-                saveChatHistory();
+                recordBotMessageInConversation(accumulatedAnswer, sources, traceSteps);
             }
 
         } catch (err) {

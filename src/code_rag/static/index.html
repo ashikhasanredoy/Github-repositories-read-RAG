@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="/static/styles.css?v=7.0">
+    <link rel="stylesheet" href="/static/styles.css?v=8.0">
 </head>
 <body>
     <div class="app-container">
@@ -35,6 +35,28 @@
                 <div class="status-pill" id="statusPill" title="Ollama Service Status">
                     <span class="status-indicator online" id="statusDot"></span>
                     <span id="statusText" class="status-label">Checking...</span>
+                </div>
+            </div>
+
+            <!-- New Conversation Button -->
+            <button type="button" id="newChatBtn" class="btn btn-new-chat" title="Start a new conversation">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>New Conversation</span>
+            </button>
+
+            <!-- Conversations History Section -->
+            <div class="sidebar-section conversations-section" id="conversationsSection">
+                <div class="section-title">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span>Conversations</span>
+                </div>
+                <div id="conversationsList" class="conversations-list">
+                    <div class="conversations-empty">No previous chats yet</div>
                 </div>
             </div>
 
@@ -278,6 +300,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
-    <script src="/static/app.js?v=6.0"></script>
+    <script src="/static/app.js?v=8.0"></script>
 </body>
 </html>
