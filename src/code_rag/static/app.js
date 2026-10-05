@@ -221,26 +221,29 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    let currentModel = "llama3.2:latest";
+
     function recordUserMessageInConversation(text) {
         if (!activeConvId) {
             activeConvId = "conv_" + Date.now();
         }
 
         let conv = conversations.find(c => c.id === activeConvId);
+        const activeModelName = (modelSelect && modelSelect.value) ? modelSelect.value : currentModel;
         if (!conv) {
             conv = {
                 id: activeConvId,
                 title: text.slice(0, 36) + (text.length > 36 ? "..." : ""),
                 timestamp: Date.now(),
-                repo: repoSelect.value || "",
-                model: modelSelect.value || "",
+                repo: (repoSelect && repoSelect.value) ? repoSelect.value : "",
+                model: activeModelName,
                 messages: []
             };
             conversations.unshift(conv);
         } else {
             conv.timestamp = Date.now();
-            conv.repo = repoSelect.value || conv.repo;
-            conv.model = modelSelect.value || conv.model;
+            if (repoSelect && repoSelect.value) conv.repo = repoSelect.value;
+            conv.model = activeModelName || conv.model;
             if (!conv.title || conv.title === "New Chat" || conv.messages.length === 0) {
                 conv.title = text.slice(0, 36) + (text.length > 36 ? "..." : "");
             }
@@ -372,10 +375,13 @@ document.addEventListener("DOMContentLoaded", () => {
             updateSelectedRepoUI();
         });
 
-        // Model selection change
-        modelSelect.addEventListener("change", () => {
-            localStorage.setItem("coderag_selected_model", modelSelect.value);
-        });
+        // Model selection change (if element exists)
+        if (modelSelect) {
+            modelSelect.addEventListener("change", () => {
+                localStorage.setItem("coderag_selected_model", modelSelect.value);
+                currentModel = modelSelect.value;
+            });
+        }
 
         // Delete Repository Action
         if (deleteRepoBtn) {
@@ -531,23 +537,28 @@ document.addEventListener("DOMContentLoaded", () => {
             const savedModel = localStorage.getItem("coderag_selected_model");
             if (res.ok) {
                 const data = await res.json();
-                modelSelect.innerHTML = "";
-                if (data.models && data.models.length > 0) {
-                    data.models.forEach(m => {
-                        const opt = document.createElement("option");
-                        opt.value = m;
-                        opt.textContent = m;
-                        if (savedModel ? m === savedModel : m === data.active_model) {
-                            opt.selected = true;
-                        }
-                        modelSelect.appendChild(opt);
-                    });
-                } else {
-                    modelSelect.innerHTML = '<option value="llama3.2:latest">llama3.2:latest</option><option value="olmo:latest">olmo:latest</option>';
+                currentModel = savedModel || data.active_model || (data.models && data.models[0]) || "llama3.2:latest";
+                if (modelSelect) {
+                    modelSelect.innerHTML = "";
+                    if (data.models && data.models.length > 0) {
+                        data.models.forEach(m => {
+                            const opt = document.createElement("option");
+                            opt.value = m;
+                            opt.textContent = m;
+                            if (savedModel ? m === savedModel : m === data.active_model) {
+                                opt.selected = true;
+                            }
+                            modelSelect.appendChild(opt);
+                        });
+                    } else {
+                        modelSelect.innerHTML = '<option value="llama3.2:latest">llama3.2:latest</option><option value="olmo:latest">olmo:latest</option>';
+                    }
                 }
             }
         } catch {
-            modelSelect.innerHTML = '<option value="llama3.2:latest">llama3.2:latest</option>';
+            if (modelSelect) {
+                modelSelect.innerHTML = '<option value="llama3.2:latest">llama3.2:latest</option>';
+            }
         }
     }
 
@@ -637,7 +648,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const q = queryInput.value.trim();
         const repo = repoSelect.value;
-        const model = modelSelect.value;
+        const model = (modelSelect && modelSelect.value) ? modelSelect.value : (currentModel || "");
 
         if (!q) return;
         if (!repo) {
