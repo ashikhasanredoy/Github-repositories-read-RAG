@@ -800,34 +800,31 @@ html, body {
     width: 100%;
 }
 
-/* Chat Messages Thread Layout */
+/* Chat Messages Thread Layout (Consistent ChatGPT-Style Centered Column) */
 .msg-row {
     display: flex;
     flex-direction: column;
-    max-width: 800px;
+    max-width: 768px;
     width: 100%;
+    margin: 0 auto;
     animation: fadeIn 0.2s ease;
 }
 
-/* User Message: Positioned slightly to the right */
+/* User Message: Positioned slightly to the right within the column */
 .msg-row.user {
     align-items: flex-end;
-    align-self: flex-end;
-    padding-left: 48px; /* Offset rightward */
 }
 
-/* AI Message: Positioned slightly to the left */
+/* AI Message: Positioned on the left within the column */
 .msg-row.bot {
     align-items: flex-start;
-    align-self: flex-start;
-    padding-right: 48px; /* Offset leftward */
 }
 
 .msg-bubble {
     word-break: break-word;
 }
 
-/* User Message: Refined compact bubble on the right */
+/* User Message: Refined compact bubble on the right side of the thread */
 .msg-row.user .msg-bubble {
     background: var(--user-bubble-bg);
     color: var(--user-bubble-text);
@@ -836,7 +833,7 @@ html, body {
     padding: 10px 18px;
     font-weight: 500;
     font-size: 0.92rem;
-    max-width: 82%;
+    max-width: 78%;
     margin-left: auto;
     box-shadow: var(--shadow-sm);
     line-height: 1.5;
