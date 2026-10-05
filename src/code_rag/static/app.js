@@ -173,7 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     textDiv.className = "markdown-body";
                     renderMarkdown(textDiv, item.text || "");
                     bubble.appendChild(textDiv);
-                    renderExtras(bubble, item.sources || [], item.traceSteps || []);
+                    renderExtras(bubble, item.sources || [], item.traceSteps || [], item.text || "");
                 }
             });
             chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -785,7 +785,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 contentEl.appendChild(textDiv);
             }
 
-            renderExtras(contentEl, sources, traceSteps);
+            renderExtras(contentEl, sources, traceSteps, accumulatedAnswer);
 
             // Persist bot message to active conversation
             if (accumulatedAnswer) {
@@ -830,7 +830,52 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function renderExtras(contentEl, sources, traceSteps) {
+    function renderExtras(contentEl, sources, traceSteps, text) {
+        // Actions Bar (Copy Answer)
+        if (text && text.trim()) {
+            const actionsDiv = document.createElement("div");
+            actionsDiv.className = "msg-actions-bar";
+            
+            const copyBtn = document.createElement("button");
+            copyBtn.type = "button";
+            copyBtn.className = "btn-copy-msg";
+            copyBtn.title = "Copy answer to clipboard";
+            copyBtn.innerHTML = `
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copy</span>
+            `;
+
+            copyBtn.addEventListener("click", async () => {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    copyBtn.innerHTML = `
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-emerald);">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span style="color: var(--accent-emerald);">Copied!</span>
+                    `;
+                    showToast("Answer copied to clipboard", "success", 2000);
+                    setTimeout(() => {
+                        copyBtn.innerHTML = `
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            <span>Copy</span>
+                        `;
+                    }, 2200);
+                } catch (e) {
+                    showToast("Failed to copy", "error");
+                }
+            });
+
+            actionsDiv.appendChild(copyBtn);
+            contentEl.appendChild(actionsDiv);
+        }
+
         // Trace Section (Collapsible)
         if (traceSteps && traceSteps.length > 0) {
             const traceSec = document.createElement("div");

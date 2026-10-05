@@ -1024,6 +1024,49 @@ html, body {
     overflow-x: auto !important;
 }
 
+/* AI Answer Actions Bar & Copy Button */
+.msg-actions-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.btn-copy-msg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.775rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-copy-msg:hover {
+    color: var(--text-primary);
+    border-color: var(--primary-color);
+    background: var(--card-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+.btn-copy-msg:active {
+    transform: scale(0.96);
+}
+
+.btn-copy-msg svg {
+    pointer-events: none;
+}
+
 /* Citations & Snippets */
 .citations-section {
     margin-top: 16px;
