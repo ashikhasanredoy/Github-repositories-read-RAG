@@ -105,7 +105,7 @@ class CodeRAGGraph:
             "1. ONLY state facts directly supported by the provided repository files.\n"
             "2. If the user asks about a specific file (e.g., a notebook or script) and it is present in the context, describe its exact code and contents.\n"
             "3. If a file or feature is NOT found in the context, explicitly state that it does not exist in the indexed codebase rather than making up imaginary code or external services.\n"
-            "4. Always cite the exact source file path and line numbers."
+            "4. Answer the user's question directly, clearly, and concisely."
         )
 
         user_prompt = f"""Repository Context:
@@ -115,7 +115,7 @@ class CodeRAGGraph:
 
 User Question: {state.get('original_question', state['question'])}
 
-Provide a truthful, precise explanation based strictly on the repository context above. End with a list of verified source citations."""
+Provide a direct, precise, and helpful answer to the user's question based strictly on the repository context above."""
 
         try:
             answer = self.ollama.generate(prompt=user_prompt, system_prompt=system_prompt)
@@ -137,7 +137,7 @@ Provide a truthful, precise explanation based strictly on the repository context
                 "snippet": d.get("content", "")
             })
 
-        trace.append(f"Answer generated with {len(sources)} source citations.")
+        trace.append(f"Answer generated.")
         return {
             "answer": answer,
             "sources": sources,
@@ -200,7 +200,7 @@ Provide a truthful, precise explanation based strictly on the repository context
             "1. ONLY state facts directly supported by the provided repository files.\n"
             "2. If the user asks about a specific file (e.g., a notebook or script) and it is present in the context, describe its exact code and contents.\n"
             "3. If a file or feature is NOT found in the context, explicitly state that it does not exist in the indexed codebase rather than making up imaginary code or external services.\n"
-            "4. Always cite the exact source file path and line numbers."
+            "4. Answer the user's question directly, clearly, and concisely."
         )
         user_prompt = f"""Repository Context:
 ----------------------------------------
@@ -209,7 +209,7 @@ Provide a truthful, precise explanation based strictly on the repository context
 
 User Question: {state.get('original_question', state['question'])}
 
-Provide a truthful, precise explanation based strictly on the repository context above. End with a list of verified source citations."""
+Provide a direct, precise, and helpful answer to the user's question based strictly on the repository context above."""
 
         sources = []
         for d in state.get("retrieved_docs", []):

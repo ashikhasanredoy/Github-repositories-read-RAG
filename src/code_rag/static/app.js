@@ -831,36 +831,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderExtras(contentEl, sources, traceSteps) {
-        // Citations List
-        if (sources && sources.length > 0) {
-            const citeSec = document.createElement("div");
-            citeSec.className = "citations-section";
-            citeSec.innerHTML = `
-                <div class="citations-header">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    <span>Verified Source Citations (${sources.length})</span>
-                </div>
-            `;
-
-            sources.forEach(s => {
-                const card = document.createElement("div");
-                card.className = "citation-card";
-                card.innerHTML = `
-                    <div class="citation-meta">
-                        <span class="citation-file">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                            ${escapeHtml(s.file_path)}
-                        </span>
-                        <span class="citation-badge">L${s.start_line}–${s.end_line}</span>
-                    </div>
-                    <pre><code class="language-${s.language || 'python'}">${escapeHtml(s.snippet || '')}</code></pre>
-                `;
-                citeSec.appendChild(card);
-            });
-            contentEl.appendChild(citeSec);
-        }
-
-        // Trace Section
+        // Trace Section (Collapsible)
         if (traceSteps && traceSteps.length > 0) {
             const traceSec = document.createElement("div");
             traceSec.className = "trace-wrapper";
