@@ -36,20 +36,22 @@ class HybridRetriever:
                 chunk_map[cid] = item
             rrf_scores[cid] = rrf_scores.get(cid, 0.0) + (1.0 / (self.rrf_k + rank + 1))
 
-        # Query path/keyword boost
-        q_tokens = [t.lower() for t in re.findall(r'[a-zA-Z0-9_\.\-]+', query) if len(t) > 2]
-        for cid, item in chunk_map.items():
-            meta = item.get("metadata", {})
-            rel_path = meta.get("rel_path", "").lower()
-            symbol_name = meta.get("symbol_name", "").lower()
+        # Target file extraction & strict filtering
+        target_files = [t for t in re.findall(r'[\w\-]+\.[\w]+', query) if not t.endswith('.com') and not t.endswith('.org')]
+        exact_file_chunks = []
+        if target_files:
+            for tf in target_files:
+                tf_lower = tf.lower()
+                for cid, item in chunk_map.items():
+                    rel = item.get("metadata", {}).get("rel_path", "").lower()
+                    if tf_lower in rel or rel.endswith(tf_lower):
+                        exact_file_chunks.append(cid)
+                        rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 1.0
 
-            for qt in q_tokens:
-                if qt in rel_path:
-                    rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 0.05
-                if qt in symbol_name:
-                    rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 0.03
-
-        sorted_ids = sorted(rrf_scores.keys(), key=lambda k: rrf_scores[k], reverse=True)[:top_k]
+        if exact_file_chunks:
+            sorted_ids = sorted(list(set(exact_file_chunks)), key=lambda k: rrf_scores[k], reverse=True)[:top_k]
+        else:
+            sorted_ids = sorted(rrf_scores.keys(), key=lambda k: rrf_scores[k], reverse=True)[:top_k]
 
         final_chunks: List[Dict[str, Any]] = []
         for cid in sorted_ids:
@@ -60,11 +62,28 @@ class HybridRetriever:
         return final_chunks
 
     @staticmethod
-    def build_context(chunks: List[Dict[str, Any]]) -> str:
+    def build_context(chunks: List[Dict[str, Any]], query: str = "") -> str:
         if not chunks:
             return "No relevant code chunks found in repository."
 
         blocks = []
+
+        # Check if user asked about a specific file that is absent
+        target_files = [t for t in re.findall(r'[\w\-]+\.[\w]+', query) if not t.endswith('.com') and not t.endswith('.org')]
+        if target_files:
+            found_any = False
+            for chunk in chunks:
+                rel = chunk.get("metadata", {}).get("rel_path", "").lower()
+                if any(tf.lower() in rel for tf in target_files):
+                    found_any = True
+                    break
+            if not found_any:
+                missing = ", ".join(target_files)
+                blocks.append(
+                    f"⚠️ [SYSTEM NOTICE: The user explicitly asked about '{missing}', but '{missing}' DOES NOT EXIST in this repository.\n"
+                    f"DO NOT attribute code from other files to '{missing}'. State clearly that '{missing}' is not present in the repository.]\n"
+                )
+
         for i, chunk in enumerate(chunks, 1):
             meta = chunk.get("metadata", {})
             file_path = meta.get("rel_path", "unknown")

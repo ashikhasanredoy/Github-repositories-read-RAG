@@ -54,7 +54,7 @@ class CodeRAGGraph:
             query=state["question"],
             top_k=settings.FINAL_TOP_K
         )
-        context = self.retriever.build_context(docs)
+        context = self.retriever.build_context(docs, query=state.get("original_question", state["question"]))
         trace.append(f"Retrieved {len(docs)} chunks")
 
         return {
