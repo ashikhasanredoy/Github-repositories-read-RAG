@@ -1,5 +1,6 @@
 import os
 import ast
+import json
 import re
 import logging
 from pathlib import Path
@@ -63,6 +64,10 @@ class CodeParser:
             logger.warning("Could not read file %s: %s", file_path, err)
             return []
 
+        ext = file_path.suffix.lower()
+        if ext == ".ipynb":
+            return self._parse_ipynb(content, file_path.name)
+
         lines = content.splitlines(keepends=True)
         if not lines:
             return []
@@ -77,13 +82,62 @@ class CodeParser:
                 content="".join(lines)
             )]
 
-        ext = file_path.suffix.lower()
         if ext == ".py":
             return self._parse_python(content, lines, file_path.name)
         elif ext in {".js", ".jsx", ".ts", ".tsx"}:
             return self._parse_js_ts(lines, file_path.name)
         
         return self._sliding_window(lines, window_size=60, overlap=12)
+
+    def _parse_ipynb(self, content: str, filename: str) -> List[CodeSymbol]:
+        symbols: List[CodeSymbol] = []
+        try:
+            nb = json.loads(content)
+            cells = nb.get("cells", [])
+            current_line = 1
+            
+            for idx, cell in enumerate(cells, 1):
+                cell_type = cell.get("cell_type", "code")
+                raw_source = cell.get("source", [])
+                if isinstance(raw_source, list):
+                    source_str = "".join(raw_source)
+                else:
+                    source_str = str(raw_source)
+                
+                source_str = source_str.strip()
+                if not source_str:
+                    continue
+                
+                cell_lines = source_str.splitlines(keepends=True)
+                cell_len = len(cell_lines)
+                end_line = current_line + max(1, cell_len) - 1
+
+                if cell_type == "code":
+                    header = f"# Notebook Cell [{idx}] (Code)\n"
+                    symbols.append(CodeSymbol(
+                        name=f"cell_{idx}_code",
+                        symbol_type="notebook_code",
+                        start_line=current_line,
+                        end_line=end_line,
+                        content=header + source_str
+                    ))
+                else:
+                    header = f"# Notebook Cell [{idx}] (Markdown/Documentation)\n"
+                    symbols.append(CodeSymbol(
+                        name=f"cell_{idx}_markdown",
+                        symbol_type="notebook_markdown",
+                        start_line=current_line,
+                        end_line=end_line,
+                        content=header + source_str
+                    ))
+                current_line = end_line + 1
+
+        except Exception as e:
+            logger.warning("Failed to parse notebook JSON %s: %s", filename, e)
+            lines = content.splitlines(keepends=True)
+            return self._sliding_window(lines, window_size=60, overlap=12)
+
+        return symbols if symbols else self._sliding_window(content.splitlines(keepends=True), window_size=60, overlap=12)
 
     def _parse_python(self, content: str, lines: List[str], filename: str) -> List[CodeSymbol]:
         symbols: List[CodeSymbol] = []

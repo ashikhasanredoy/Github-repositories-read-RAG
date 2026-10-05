@@ -20,14 +20,17 @@ class Settings(BaseSettings):
     CHROMA_DIR: Path = DATA_DIR / "chroma_db"
     BM25_DIR: Path = DATA_DIR / "bm25_indices"
 
-    MAX_FILE_SIZE_KB: int = 500
-    MAX_CHUNK_CHARS: int = 2500
+    MAX_FILE_SIZE_KB: int = 2000
+    MAX_CHUNK_CHARS: int = 3000
     SUPPORTED_EXTENSIONS: Set[str] = {
-        ".py", ".js", ".ts", ".jsx", ".tsx",
-        ".html", ".css", ".json", ".xml", ".txt", ".csv",
-        ".java", ".cpp", ".c", ".h", ".hpp",
+        ".py", ".ipynb", ".js", ".ts", ".jsx", ".tsx",
+        ".html", ".css", ".scss", ".sass", ".less",
+        ".json", ".jsonl", ".xml", ".txt", ".csv", ".tsv",
+        ".java", ".cpp", ".c", ".h", ".hpp", ".cc", ".cxx",
         ".go", ".rs", ".rb", ".php", ".cs", ".swift", ".kt", ".dart", ".scala", ".lua",
-        ".md", ".yaml", ".yml", ".toml", ".sql", ".sh", ".dockerfile", ".env"
+        ".md", ".markdown", ".rst", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+        ".sql", ".prisma", ".graphql", ".gql", ".sh", ".bash", ".zsh", ".dockerfile", ".env",
+        ".vue", ".svelte", ".proto"
     }
     SPECIAL_FILENAMES: Set[str] = {
         "dockerfile", "makefile", "jenkinsfile", "requirements.txt",
@@ -36,16 +39,16 @@ class Settings(BaseSettings):
     IGNORE_DIRS: Set[str] = {
         ".git", ".github", "node_modules", "venv", ".venv", "env",
         "__pycache__", "dist", "build", ".next", ".cache",
-        "coverage", ".pytest_cache", ".idea", ".vscode"
+        "coverage", ".pytest_cache", ".idea", ".vscode", ".ipynb_checkpoints"
     }
     IGNORE_FILES: Set[str] = {
         "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
         "poetry.lock", "Pipfile.lock", "Cargo.lock"
     }
 
-    VECTOR_TOP_K: int = 10
-    BM25_TOP_K: int = 10
-    FINAL_TOP_K: int = 6
+    VECTOR_TOP_K: int = 15
+    BM25_TOP_K: int = 15
+    FINAL_TOP_K: int = 8
     RRF_K: int = 60
 
     model_config = SettingsConfigDict(

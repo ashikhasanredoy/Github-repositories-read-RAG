@@ -99,10 +99,13 @@ class CodeRAGGraph:
         trace.append("Generating response with OLMo...")
 
         system_prompt = (
-            "You are a principal software engineer and codebase expert.\n"
-            "Answer the user's question using ONLY the provided repository context.\n"
-            "Do not invent functions or file paths that are not in the context.\n"
-            "Always cite the exact file path and line numbers where logic is implemented."
+            "You are an expert codebase assistant.\n"
+            "Your task is to provide accurate, truthful explanations strictly based on the provided repository context.\n"
+            "Rules:\n"
+            "1. ONLY state facts directly supported by the provided repository files.\n"
+            "2. If the user asks about a specific file (e.g., a notebook or script) and it is present in the context, describe its exact code and contents.\n"
+            "3. If a file or feature is NOT found in the context, explicitly state that it does not exist in the indexed codebase rather than making up imaginary code or external services.\n"
+            "4. Always cite the exact source file path and line numbers."
         )
 
         user_prompt = f"""Repository Context:
@@ -112,9 +115,7 @@ class CodeRAGGraph:
 
 User Question: {state.get('original_question', state['question'])}
 
-Provide a clear and accurate explanation of the implementation.
-Conclude with a bulleted list of source files and line ranges.
-"""
+Provide a truthful, precise explanation based strictly on the repository context above. End with a list of verified source citations."""
 
         try:
             answer = self.ollama.generate(prompt=user_prompt, system_prompt=system_prompt)
@@ -193,10 +194,13 @@ Conclude with a bulleted list of source files and line ranges.
         # 4. Stream tokens
         yield {"type": "trace", "step": "Generating response..."}
         system_prompt = (
-            "You are a principal software engineer and codebase expert.\n"
-            "Answer the user's question concisely using ONLY the provided repository context.\n"
-            "Do not invent functions or file paths that are not in the context.\n"
-            "Always cite the exact file path and line numbers where logic is implemented."
+            "You are an expert codebase assistant.\n"
+            "Your task is to provide accurate, truthful explanations strictly based on the provided repository context.\n"
+            "Rules:\n"
+            "1. ONLY state facts directly supported by the provided repository files.\n"
+            "2. If the user asks about a specific file (e.g., a notebook or script) and it is present in the context, describe its exact code and contents.\n"
+            "3. If a file or feature is NOT found in the context, explicitly state that it does not exist in the indexed codebase rather than making up imaginary code or external services.\n"
+            "4. Always cite the exact source file path and line numbers."
         )
         user_prompt = f"""Repository Context:
 ----------------------------------------
@@ -205,7 +209,7 @@ Conclude with a bulleted list of source files and line ranges.
 
 User Question: {state.get('original_question', state['question'])}
 
-Provide a clear and concise explanation of the implementation. Conclude with source files and line ranges."""
+Provide a truthful, precise explanation based strictly on the repository context above. End with a list of verified source citations."""
 
         sources = []
         for d in state.get("retrieved_docs", []):

@@ -7,14 +7,18 @@ from src.code_rag.core.parser import CodeParser
 
 class CodeChunker:
     LANGUAGE_MAP = {
-        ".py": "python", ".js": "javascript", ".jsx": "javascript",
+        ".py": "python", ".ipynb": "python", ".js": "javascript", ".jsx": "javascript",
         ".ts": "typescript", ".tsx": "typescript", ".go": "go",
-        ".java": "java", ".cpp": "cpp", ".c": "c", ".h": "c", ".hpp": "cpp",
-        ".rs": "rust", ".rb": "ruby", ".php": "php", ".md": "markdown",
-        ".yaml": "yaml", ".yml": "yaml", ".toml": "toml", ".sql": "sql", ".sh": "bash",
-        ".html": "html", ".css": "css", ".json": "json", ".xml": "xml",
+        ".java": "java", ".cpp": "cpp", ".c": "c", ".h": "c", ".hpp": "cpp", ".cc": "cpp", ".cxx": "cpp",
+        ".rs": "rust", ".rb": "ruby", ".php": "php", ".md": "markdown", ".markdown": "markdown", ".rst": "rst",
+        ".yaml": "yaml", ".yml": "yaml", ".toml": "toml", ".ini": "ini", ".cfg": "ini",
+        ".sql": "sql", ".prisma": "prisma", ".graphql": "graphql", ".gql": "graphql",
+        ".sh": "bash", ".bash": "bash", ".zsh": "bash",
+        ".html": "html", ".css": "css", ".scss": "scss", ".sass": "sass", ".less": "less",
+        ".json": "json", ".jsonl": "json", ".xml": "xml", ".txt": "text", ".csv": "csv", ".tsv": "tsv",
         ".cs": "csharp", ".swift": "swift", ".kt": "kotlin", ".dart": "dart",
-        ".scala": "scala", ".lua": "lua", ".env": "ini", ".dockerfile": "dockerfile"
+        ".scala": "scala", ".lua": "lua", ".env": "ini", ".dockerfile": "dockerfile",
+        ".vue": "vue", ".svelte": "svelte", ".proto": "protobuf"
     }
 
     def __init__(self, parser: Optional[CodeParser] = None, max_chunk_chars: int = settings.MAX_CHUNK_CHARS):

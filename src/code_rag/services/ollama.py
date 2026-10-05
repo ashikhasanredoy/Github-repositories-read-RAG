@@ -69,7 +69,7 @@ class OllamaService:
             return []
 
         all_embeddings: List[List[float]] = []
-        bounded_texts = [t[:1200] for t in texts]
+        bounded_texts = [t[:settings.MAX_CHUNK_CHARS] for t in texts]
 
         with httpx.Client(timeout=180.0) as client:
             for i in range(0, len(bounded_texts), batch_size):
@@ -92,7 +92,7 @@ class OllamaService:
                     try:
                         resp = client.post(
                             f"{self.base_url}/api/embeddings",
-                            json={"model": self.embedding_model, "prompt": text[:800]}
+                            json={"model": self.embedding_model, "prompt": text[:settings.MAX_CHUNK_CHARS]}
                         )
                         if resp.status_code == 200:
                             all_embeddings.append(resp.json().get("embedding", []))

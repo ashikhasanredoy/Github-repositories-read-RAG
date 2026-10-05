@@ -1,3 +1,4 @@
+import re
 import logging
 from typing import List, Dict, Any, Optional
 from src.code_rag.config import settings
@@ -34,6 +35,19 @@ class HybridRetriever:
             if cid not in chunk_map:
                 chunk_map[cid] = item
             rrf_scores[cid] = rrf_scores.get(cid, 0.0) + (1.0 / (self.rrf_k + rank + 1))
+
+        # Query path/keyword boost
+        q_tokens = [t.lower() for t in re.findall(r'[a-zA-Z0-9_\.\-]+', query) if len(t) > 2]
+        for cid, item in chunk_map.items():
+            meta = item.get("metadata", {})
+            rel_path = meta.get("rel_path", "").lower()
+            symbol_name = meta.get("symbol_name", "").lower()
+
+            for qt in q_tokens:
+                if qt in rel_path:
+                    rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 0.05
+                if qt in symbol_name:
+                    rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 0.03
 
         sorted_ids = sorted(rrf_scores.keys(), key=lambda k: rrf_scores[k], reverse=True)[:top_k]
 
