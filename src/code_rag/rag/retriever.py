@@ -49,7 +49,15 @@ class HybridRetriever:
                         rrf_scores[cid] = rrf_scores.get(cid, 0.0) + 1.0
 
         if exact_file_chunks:
-            sorted_ids = sorted(list(set(exact_file_chunks)), key=lambda k: rrf_scores[k], reverse=True)[:top_k]
+            # Sort file chunks sequentially by start_line for complete contiguous reading
+            unique_ids = list(set(exact_file_chunks))
+            sorted_ids = sorted(
+                unique_ids,
+                key=lambda cid: (
+                    chunk_map[cid].get("metadata", {}).get("rel_path", ""),
+                    chunk_map[cid].get("metadata", {}).get("start_line", 0)
+                )
+            )[:top_k]
         else:
             sorted_ids = sorted(rrf_scores.keys(), key=lambda k: rrf_scores[k], reverse=True)[:top_k]
 

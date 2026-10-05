@@ -116,14 +116,14 @@ class OllamaService:
             "options": {
                 "temperature": 0.1,
                 "top_p": 0.9,
-                "num_predict": 320,
-                "num_ctx": 2048
+                "num_predict": settings.MAX_TOKENS,
+                "num_ctx": settings.NUM_CTX
             }
         }
         if system_prompt:
             payload["system"] = system_prompt
 
-        with httpx.Client(timeout=120.0) as client:
+        with httpx.Client(timeout=300.0) as client:
             with client.stream("POST", f"{self.base_url}/api/generate", json=payload) as response:
                 if response.status_code == 404:
                     installed = self.list_installed_models()

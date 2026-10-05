@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "olmo:latest"
     EMBEDDING_MODEL: str = "nomic-embed-text"
     TEMPERATURE: float = 0.1
-    MAX_TOKENS: int = 2048
+    MAX_TOKENS: int = 4096
+    NUM_CTX: int = 8192
 
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
     DATA_DIR: Path = BASE_DIR / "data"
