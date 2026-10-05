@@ -9,6 +9,29 @@ from src.code_rag.services.ollama import OllamaService
 
 logger = logging.getLogger(__name__)
 
+SYSTEM_PROMPT = """═══════════════════════════════════════════════════════════════
+SYSTEM PROMPT — GITHUB FILE READER + FULL FILE RETURNER
+═══════════════════════════════════════════════════════════════
+
+You are a codebase expert whose job is to read and analyze files from GitHub
+repositories and return COMPLETE, ACCURATE file contents and code explanations.
+Follow every rule below STRICTLY:
+
+1. RESOLVE THE FILE FIRST:
+   - Use the provided Repository Context to identify the exact files and symbols.
+   - If a requested file does NOT exist in the repository context, clearly state that it is not found in the repository. Never invent imaginary files or services.
+
+2. FULL ACCURACY & NO PLACEHOLDERS:
+   - When asked for code or files, return complete, real code from the context.
+   - NEVER use placeholders like "...", "# rest of code here", "// same as before", "[unchanged]", or "TODO".
+
+3. PRESERVE EXACT CODE LOGIC:
+   - Preserve imports, functions, classes, and logic exactly as they exist in the repository.
+   - Do NOT invent fictional cloud services or external dependencies not found in the files.
+
+4. DIRECT & PRECISE RESPONSES:
+   - Answer the user's question directly, clearly, and concisely based strictly on the repository context."""
+
 class CodeRAGGraph:
     def __init__(
         self,
@@ -98,15 +121,7 @@ class CodeRAGGraph:
         trace = list(state.get("trace_steps", []))
         trace.append("Generating response with OLMo...")
 
-        system_prompt = (
-            "You are an expert codebase assistant.\n"
-            "Your task is to provide accurate, truthful explanations strictly based on the provided repository context.\n"
-            "Rules:\n"
-            "1. ONLY state facts directly supported by the provided repository files.\n"
-            "2. If the user asks about a specific file (e.g., a notebook or script) and it is present in the context, describe its exact code and contents.\n"
-            "3. If a file or feature is NOT found in the context, explicitly state that it does not exist in the indexed codebase rather than making up imaginary code or external services.\n"
-            "4. Answer the user's question directly, clearly, and concisely."
-        )
+        system_prompt = SYSTEM_PROMPT
 
         user_prompt = f"""Repository Context:
 ----------------------------------------
@@ -193,15 +208,7 @@ Provide a direct, precise, and helpful answer to the user's question based stric
 
         # 4. Stream tokens
         yield {"type": "trace", "step": "Generating response..."}
-        system_prompt = (
-            "You are an expert codebase assistant.\n"
-            "Your task is to provide accurate, truthful explanations strictly based on the provided repository context.\n"
-            "Rules:\n"
-            "1. ONLY state facts directly supported by the provided repository files.\n"
-            "2. If the user asks about a specific file (e.g., a notebook or script) and it is present in the context, describe its exact code and contents.\n"
-            "3. If a file or feature is NOT found in the context, explicitly state that it does not exist in the indexed codebase rather than making up imaginary code or external services.\n"
-            "4. Answer the user's question directly, clearly, and concisely."
-        )
+        system_prompt = SYSTEM_PROMPT
         user_prompt = f"""Repository Context:
 ----------------------------------------
 {state.get('context_str', '')}
