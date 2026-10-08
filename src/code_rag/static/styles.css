@@ -678,13 +678,22 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.2s, color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
     flex-shrink: 0;
+}
+
+.indexed-repo-item:hover .btn-delete-repo-item,
+.indexed-repo-item:focus-within .btn-delete-repo-item {
+    opacity: 1;
+    visibility: visible;
 }
 
 .btn-delete-repo-item:hover {
     color: var(--accent-rose);
     background: rgba(239, 68, 68, 0.15);
+    transform: scale(1.1);
 }
 
 .repo-meta-card {
