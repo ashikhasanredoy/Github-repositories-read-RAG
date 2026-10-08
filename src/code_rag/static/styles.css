@@ -1529,13 +1529,47 @@ html, body {
     background: var(--accent-cyan);
 }
 
-/* Loading Box */
+/* Loading Box & Live Timer Badge */
 .loading-box {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     color: var(--text-secondary);
     font-size: 0.85rem;
+}
+
+.stream-status-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.stream-timer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.28);
+    border-radius: var(--radius-full);
+    color: var(--primary-color);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.725rem;
+    font-weight: 600;
+}
+
+.time-elapsed-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 0.725rem;
+    font-family: 'JetBrains Mono', monospace;
+    margin-left: auto;
+    padding: 3px 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
 }
 
 /* ==========================================================================

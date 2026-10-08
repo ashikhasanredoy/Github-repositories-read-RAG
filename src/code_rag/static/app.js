@@ -844,16 +844,28 @@ document.addEventListener("DOMContentLoaded", () => {
         appendMsg("user", q, userMsgIndex);
 
         queryInput.value = "";
-        queryInput.style.height = "auto";
+        queryInput.style.height = "auto";        const startTime = performance.now();
+        let timerSeconds = 0;
 
-        // Append Loading Bot Message
+        // Append Loading Bot Message with live counting timer
         const botMsg = appendMsg("bot", `
             <div class="loading-box">
                 <span class="spinner" style="border-color: rgba(99, 102, 241, 0.2); border-top-color: var(--primary-color);"></span>
-                <span class="stream-status">Analyzing intent & searching AST symbols...</span>
+                <div class="stream-status-wrapper">
+                    <span class="stream-status">Analyzing intent & searching AST symbols...</span>
+                    <span class="stream-timer-badge">⏱️ <span class="stream-timer-val">0</span>s</span>
+                </div>
             </div>
         `, userMsgIndex + 1);
         const contentEl = botMsg.querySelector(".msg-bubble");
+
+        const timerInterval = setInterval(() => {
+            timerSeconds++;
+            const timerValEl = contentEl.querySelector(".stream-timer-val");
+            if (timerValEl) {
+                timerValEl.textContent = timerSeconds;
+            }
+        }, 1000);
 
         isSubmitting = true;
         if (sendBtn) sendBtn.disabled = true;
@@ -861,6 +873,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let accumulatedAnswer = "";
         let sources = [];
         let traceSteps = [];
+        let finalElapsedSec = null;
 
         try {
             const res = await fetch("/api/query/stream", {
@@ -942,6 +955,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
+            finalElapsedSec = ((performance.now() - startTime) / 1000).toFixed(1);
+
             if (!textDiv && accumulatedAnswer) {
                 contentEl.innerHTML = "";
                 textDiv = document.createElement("div");
@@ -953,7 +968,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 renderMarkdown(textDiv, accumulatedAnswer);
             }
 
-            renderExtras(contentEl, sources, traceSteps, accumulatedAnswer);
+            renderExtras(contentEl, sources, traceSteps, accumulatedAnswer, finalElapsedSec);
 
             // Persist bot message to active conversation
             if (accumulatedAnswer) {
@@ -969,12 +984,13 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
             showToast(err.message, "error");
         } finally {
+            clearInterval(timerInterval);
             isSubmitting = false;
             if (sendBtn) sendBtn.disabled = false;
             if (autoScrollEnabled && chatContainer) {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
-            updateScrollState();
+        }      updateScrollState();
         }
     }
 
@@ -1415,8 +1431,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function renderExtras(contentEl, sources, traceSteps, text) {
-        // Actions Bar (Copy Answer)
+    function renderExtras(contentEl, sources, traceSteps, text, elapsedTime) {
+        // Actions Bar (Copy Answer & Time Badge)
         if (text && text.trim()) {
             const actionsDiv = document.createElement("div");
             actionsDiv.className = "msg-actions-bar";
@@ -1458,6 +1474,21 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             actionsDiv.appendChild(copyBtn);
+
+            if (elapsedTime) {
+                const timeBadge = document.createElement("span");
+                timeBadge.className = "time-elapsed-meta";
+                timeBadge.title = `Completed in ${elapsedTime}s`;
+                timeBadge.innerHTML = `
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span>${elapsedTime}s</span>
+                `;
+                actionsDiv.appendChild(timeBadge);
+            }
+
             contentEl.appendChild(actionsDiv);
         }
 
