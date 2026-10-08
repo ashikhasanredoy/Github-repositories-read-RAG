@@ -279,9 +279,9 @@ Github-repositories-read-RAG/
 ## 🎨 Acknowledgements & Credits
 
 - **Frontend Design & Development**: The modern, responsive ChatGPT-inspired web user interface, glassmorphism design system, real-time streaming visual effects, dynamic code block headers (Copy & Download buttons), and interactive repository management were designed and developed with assistance from **Claude (Anthropic)**.
-- **Backend & RAG Architecture**: Built with FastAPI, LangGraph, ChromaDB, BM25Plus, and Ollama.
+- **Backend & RAG Architecture**: Designed and developed by **[Ashik Hasan Redoy](https://github.com/ashikhasanredoy)** using FastAPI, LangGraph, ChromaDB, BM25Plus, AST syntax parsing, and Ollama.
 
 ---
 
 ## 📄 License
-MIT © 2026 Code RAG Contributors
+MIT © 2026 Ashik Hasan Redoy
