@@ -605,12 +605,95 @@ html, body {
     transform: none;
 }
 
+.indexed-repos-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.indexed-repo-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+.indexed-repo-item:hover {
+    border-color: var(--primary-color);
+    background: var(--card-hover);
+}
+
+.indexed-repo-item.active {
+    border-color: var(--primary-color);
+    background: rgba(99, 102, 241, 0.12);
+}
+
+.indexed-repo-name-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.775rem;
+    text-align: left;
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0;
+}
+
+.indexed-repo-name-btn:hover {
+    color: var(--primary-color);
+}
+
+.indexed-repo-active-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-emerald);
+    flex-shrink: 0;
+}
+
+.btn-delete-repo-item {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 3px 5px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.btn-delete-repo-item:hover {
+    color: var(--accent-rose);
+    background: rgba(239, 68, 68, 0.15);
+}
+
 .repo-meta-card {
     background: var(--bg-base);
     border: 1px solid var(--card-border);
     border-radius: var(--radius-md);
     padding: 6px 10px;
     font-size: 0.75rem;
+    margin-top: 8px;
 }
 
 .repo-meta-row {

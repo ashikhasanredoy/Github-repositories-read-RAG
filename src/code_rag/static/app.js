@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const conversationsList = document.getElementById("conversationsList");
     const repoSelect = document.getElementById("repoSelect");
     const deleteRepoBtn = document.getElementById("deleteRepoBtn");
+    const indexedReposList = document.getElementById("indexedReposList");
     const modelSelect = document.getElementById("modelSelect");
     const chatContainer = document.getElementById("chatContainer");
     const queryForm = document.getElementById("queryForm");
@@ -416,38 +417,78 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Delete Repository Action
+        async function executeRepoDelete(targetRepo) {
+            if (!targetRepo) return;
+
+            const confirmed = window.confirm(`Are you sure you want to delete indexed repository "${targetRepo}"?\n\nThis will permanently remove its vector embeddings, BM25 search index, and cached files.`);
+            if (!confirmed) return;
+
+            if (deleteRepoBtn) {
+                deleteRepoBtn.disabled = true;
+                deleteRepoBtn.innerHTML = `<span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>`;
+            }
+
+            try {
+                const res = await fetch(`/api/repos/${encodeURIComponent(targetRepo)}`, {
+                    method: "DELETE"
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showToast(`Repository "${targetRepo}" deleted successfully`, "success");
+                    if (localStorage.getItem("coderag_selected_repo") === targetRepo) {
+                        localStorage.removeItem("coderag_selected_repo");
+                    }
+                    await loadRepos();
+                } else {
+                    showToast(data.detail || `Failed to delete "${targetRepo}"`, "error");
+                }
+            } catch (err) {
+                showToast(`Error deleting repository: ${err.message}`, "error");
+            } finally {
+                if (deleteRepoBtn) {
+                    deleteRepoBtn.innerHTML = `
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                    `;
+                }
+                updateSelectedRepoUI();
+            }
+        }
+
+        // Delete Repository Action (Toolbar Button)
         if (deleteRepoBtn) {
             deleteRepoBtn.addEventListener("click", async () => {
                 const targetRepo = repoSelect.value;
                 if (!targetRepo) return;
+                await executeRepoDelete(targetRepo);
+            });
+        }
 
-                const confirmed = window.confirm(`Are you sure you want to delete indexed repository "${targetRepo}"?\n\nThis will remove its vector embeddings, BM25 search index, and cached files.`);
-                if (!confirmed) return;
-
-                deleteRepoBtn.disabled = true;
-                const originalContent = deleteRepoBtn.innerHTML;
-                deleteRepoBtn.innerHTML = `<span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>`;
-
-                try {
-                    const res = await fetch(`/api/repos/${encodeURIComponent(targetRepo)}`, {
-                        method: "DELETE"
-                    });
-                    const data = await res.json();
-                    if (res.ok) {
-                        showToast(`Repository "${targetRepo}" deleted successfully`, "success");
-                        if (localStorage.getItem("coderag_selected_repo") === targetRepo) {
-                            localStorage.removeItem("coderag_selected_repo");
-                        }
-                        await loadRepos();
-                    } else {
-                        showToast(data.detail || `Failed to delete "${targetRepo}"`, "error");
+        // Indexed Repositories List Click Delegation
+        if (indexedReposList) {
+            indexedReposList.addEventListener("click", async (e) => {
+                const delBtn = e.target.closest(".btn-delete-repo-item");
+                if (delBtn) {
+                    const targetRepo = delBtn.getAttribute("data-repo");
+                    if (targetRepo) {
+                        await executeRepoDelete(targetRepo);
                     }
-                } catch (err) {
-                    showToast(`Error deleting repository: ${err.message}`, "error");
-                } finally {
-                    deleteRepoBtn.innerHTML = originalContent;
-                    updateSelectedRepoUI();
+                    return;
+                }
+
+                const nameBtn = e.target.closest(".indexed-repo-name-btn");
+                if (nameBtn) {
+                    const targetRepo = nameBtn.getAttribute("data-repo");
+                    if (targetRepo && repoSelect) {
+                        repoSelect.value = targetRepo;
+                        localStorage.setItem("coderag_selected_repo", targetRepo);
+                        updateSelectedRepoUI();
+                        showToast(`Switched active repository to "${targetRepo}"`, "info", 1800);
+                    }
                 }
             });
         }
@@ -500,6 +541,26 @@ document.addEventListener("DOMContentLoaded", () => {
                 deleteRepoBtn.disabled = true;
                 deleteRepoBtn.title = "No repository selected";
             }
+        }
+
+        // Sync active state in indexedReposList
+        if (indexedReposList) {
+            indexedReposList.querySelectorAll(".indexed-repo-item").forEach(item => {
+                const btn = item.querySelector(".indexed-repo-name-btn");
+                const repo = btn ? btn.getAttribute("data-repo") : null;
+                if (repo === val) {
+                    item.classList.add("active");
+                    if (!item.querySelector(".indexed-repo-active-dot")) {
+                        const dot = document.createElement("span");
+                        dot.className = "indexed-repo-active-dot";
+                        btn.insertBefore(dot, btn.firstChild);
+                    }
+                } else {
+                    item.classList.remove("active");
+                    const dot = item.querySelector(".indexed-repo-active-dot");
+                    if (dot) dot.remove();
+                }
+            });
         }
     }
 
@@ -627,12 +688,15 @@ document.addEventListener("DOMContentLoaded", () => {
             if (res.ok) {
                 const data = await res.json();
                 repoSelect.innerHTML = "";
+                if (indexedReposList) indexedReposList.innerHTML = "";
+
                 if (data.repos && data.repos.length > 0) {
                     let hasSelected = false;
                     data.repos.forEach((r, idx) => {
                         const opt = document.createElement("option");
                         opt.value = r;
                         opt.textContent = r;
+                        const isSelected = (savedRepo && r === savedRepo) || (!savedRepo && idx === 0);
                         if (savedRepo && r === savedRepo) {
                             opt.selected = true;
                             hasSelected = true;
@@ -641,12 +705,34 @@ document.addEventListener("DOMContentLoaded", () => {
                             hasSelected = true;
                         }
                         repoSelect.appendChild(opt);
+
+                        // Populate indexed repository list item with instant delete button
+                        if (indexedReposList) {
+                            const item = document.createElement("div");
+                            item.className = `indexed-repo-item ${isSelected ? "active" : ""}`;
+                            item.innerHTML = `
+                                <button type="button" class="indexed-repo-name-btn" data-repo="${escapeHtml(r)}" title="Switch to ${escapeHtml(r)}">
+                                    ${isSelected ? '<span class="indexed-repo-active-dot"></span>' : ''}
+                                    <span>${escapeHtml(r)}</span>
+                                </button>
+                                <button type="button" class="btn-delete-repo-item" data-repo="${escapeHtml(r)}" title="Delete repository ${escapeHtml(r)}">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            `;
+                            indexedReposList.appendChild(item);
+                        }
                     });
                     if (!hasSelected && data.repos.length > 0) {
                         repoSelect.options[0].selected = true;
                     }
                 } else {
                     repoSelect.innerHTML = '<option value="">No repositories indexed</option>';
+                    if (indexedReposList) {
+                        indexedReposList.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); padding:4px 0;">No indexed repositories</div>';
+                    }
                 }
                 updateSelectedRepoUI();
             }
