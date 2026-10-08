@@ -1,76 +1,93 @@
-# 💻 GitHub Code RAG with OLMo & LangGraph
+# 🧠 GitHub Repositories Read RAG — Codebase Intelligence Assistant
 
-An advanced, production-grade **Code Retrieval-Augmented Generation (RAG)** system designed to ingest, parse, index, and query any public GitHub repository or local codebase with exact file and line-level citations.
+An advanced, production-grade **Code Retrieval-Augmented Generation (RAG)** system designed to ingest, parse, index, and query any public GitHub repository or local codebase with line-by-line understanding, exact file/symbol citations, real-time ChatGPT-style code streaming, and local LLM execution.
 
-Powered by **AST-aware code chunking**, **ChromaDB + BM25Plus Hybrid Retrieval (RRF)**, and a **Corrective LangGraph Workflow** using **OLMo** (or local Ollama models like `llama3.2`).
+Powered by **AST-aware code chunking**, **ChromaDB + BM25Plus Hybrid Retrieval (RRF)**, and a **Corrective LangGraph Workflow** using local Ollama models (e.g., `llama3.2:latest`, `olmo:latest`).
 
 ---
 
-## 🏗️ Architecture
-
-![Architecture Diagram](assets/pipeline_diagram.jpg)
+## 🏗️ System Architecture & Workflow
 
 ```text
-                  GitHub Repository (URL or Local)
-                                 │
-                                 ↓
-                     [1] REPOSITORY INGESTION
-                         • Git Cloner / Local Loader
-                         • File & Extension Filtering
-                                 │
-                                 ↓
-                        [2] CODE PARSING (AST)
-                         • Python AST & Multi-language Syntax Extractors
-                         • Symbol-Level Chunks (Classes, Functions, Methods)
-                         • Rich Line Number Metadata (Start–End lines)
-                                 │
-                                 ↓
-                         [3] HYBRID INDEXING
-                         ┌───────┴───────┐
-                         ↓               ↓
-                  nomic-embed-text    BM25Plus Tokenizer
-                         ↓               ↓
-                     ChromaDB       Inverted Index
-                         │               │
-                         └───────┬───────┘
-                                 │
-  User Question ─────────────────┼────────────────────────┐
-                                 ↓                        ↓
-                 [4] LANGGRAPH WORKFLOW                   │
-                         • Query Intent Analysis          │
-                         • Hybrid Search (RRF Fusion)     │
-                         • Relevance Grader               │
-                         • Query Rewriting (Corrective)   │
-                         • Grounded OLMo Reasoning        │
-                                 │                        │
-                                 ↓                        │
-                 [5] ANSWER & EXACT CITATIONS ────────────┘
-                         • Natural Language Explanation
-                         • 📄 File Path + 📍 Line Ranges
-                         • 🏷️ Symbol Names & Types
+                               GitHub Repository (URL or Local Directory)
+                                                  │
+                                                  ↓
+                                  ┌───────────────────────────────┐
+                                  │   [1] REPOSITORY INGESTION    │
+                                  │   • Git Shallow Cloner / Local │
+                                  │   • Extension & Ignore Filter │
+                                  └───────────────┬───────────────┘
+                                                  │
+                                                  ↓
+                                  ┌───────────────────────────────┐
+                                  │   [2] AST-AWARE CODE PARSING  │
+                                  │   • Python AST Tree Traversal │
+                                  │   • Class/Function Extractors │
+                                  │   • Exact Line Bounds & Dims  │
+                                  └───────────────┬───────────────┘
+                                                  │
+                                                  ↓
+                                  ┌───────────────────────────────┐
+                                  │      [3] DUAL HYBRID INDEX    │
+                                  │   Dense Vector + BM25 Lexical │
+                                  └───────┬───────────────┬───────┘
+                                          │               │
+                                          ↓               ↓
+                                   ChromaDB Store     BM25+ Index
+                                  (nomic-embed)    (Code Tokenizer)
+                                          │               │
+                                          └───────┬───────┘
+                                                  │
+ ┌────────────────────────────────────────────────┼────────────────────────────────────────┐
+ │                                                ↓                                        │
+ │   User Question / Snippet ──────────► [4] LANGGRAPH WORKFLOW                            │
+ │                                       • Query Intent & Entity Extraction                │
+ │                                       • Reciprocal Rank Fusion (RRF Search)             │
+ │                                       • Relevance Grader & Self-Correction              │
+ │                                       • Grounded Ollama LLM Reasoning                   │
+ │                                                │                                        │
+ └────────────────────────────────────────────────┼────────────────────────────────────────┘
+                                                  │
+                                                  ↓
+                                  ┌───────────────────────────────┐
+                                  │  [5] SSE REAL-TIME STREAMING  │
+                                  │  • ChatGPT-Style Code Typing  │
+                                  │  • Copy & Download (.py, etc.)│
+                                  │  • Line-by-Line AI Explainer  │
+                                  │  • Exact File & Line Citations│
+                                  └───────────────────────────────┘
 ```
 
 ---
 
-## 🔍 How It Works (Under the Hood)
+## 🔍 How This Project Actually Works (Under the Hood)
 
-Traditional RAG systems split text arbitrarily every *N* characters or tokens, slicing code across functions, breaking indentation, and losing vital symbol context. **GitHub Code RAG** solves this through a dedicated 5-stage engineering pipeline:
+Traditional document RAG systems split raw text arbitrarily every *N* characters or tokens. When applied to source code, this breaks functions in half, loses class contexts, drops indentation, and misplaces variable definitions.
 
-### 1. Repository Ingestion & Smart Filtering
-- **Input Flexibility**: Accepts both GitHub URLs (`https://github.com/owner/repo`) and local directory paths.
-- **Shallow Cloning**: Performs depth-1 clones with automated caching in `data/repos/` to keep disk usage light and speeds high.
-- **Smart Filtering**: Ignores lock files (`package-lock.json`, `poetry.lock`), binary files, virtual environments (`.venv`, `node_modules`), build directories, and dotfiles.
+**GitHub Repositories Read RAG** solves this through a 6-stage engineering pipeline:
 
-### 2. AST-Aware Code Parsing & Chunking
-- **Abstract Syntax Tree (AST)**: Parses Python and source code into structural nodes (classes, functions, standalone methods).
-- **Context Preservation**: Each chunk retains the complete functional block with exact `start_line`, `end_line`, `file_path`, `symbol_name`, and `symbol_type`.
-- **Bounded Slicing**: Large classes and modules are sliced at logical method boundaries so embedding context windows are never overloaded.
+---
 
-### 3. Dual Hybrid Indexing (Dense + Sparse)
+### 1. Repository Ingestion & Smart Filtering (`src/code_rag/core/cloner.py`)
+- **Flexible Ingestion**: Accepts both remote GitHub URLs (e.g., `https://github.com/pallets/flask`) and local disk directories.
+- **Shallow Cloning & Caching**: Clones repositories with `--depth 1` into `data/repos/` to minimize disk space and optimize ingestion speed.
+- **Strict File Filter**: Automatically ignores lock files (`package-lock.json`, `poetry.lock`), binary files, virtual environments (`.venv`, `node_modules`, `dist`, `build`), and hidden directories (`.git`).
 
-**Indexing** is the process of converting raw code files into searchable data structures so the AI can locate exact functions, classes, and logic in milliseconds without having to read through every file in the repository on every query.
+---
 
-The system builds **two complementary indices** simultaneously:
+### 2. AST-Aware Code Parsing & Chunking (`src/code_rag/core/parser.py`, `chunker.py`)
+- **Abstract Syntax Tree (AST)**: Parses Python code into logical syntax nodes:
+  - **Classes**: Retains class definitions, docstrings, and signatures.
+  - **Functions & Methods**: Preserves complete functional bodies, arguments, and decorators.
+  - **Global & Module Scope**: Captures top-level constants, configuration dictionaries, and imports.
+- **Exact Line Range Metadata**: Every chunk tracks its `start_line`, `end_line`, `file_path`, `symbol_name`, and `symbol_type`.
+- **Repository Structure Chunk**: Automatically creates an ASCII file-tree chunk (`repository_file_tree`) to enable repository overview queries.
+
+---
+
+### 3. Dual Hybrid Indexing (`src/code_rag/storage/`)
+
+To balance conceptual meaning with exact symbol matching, the project builds **two complementary indexes**:
 
 ```text
                   AST-Parsed Code Chunks
@@ -85,154 +102,175 @@ The system builds **two complementary indices** simultaneously:
    • Finds concepts (e.g. auth)    • Finds names (e.g. JWTAuth)
 ```
 
-1. **Semantic Vector Index (`vector_store.index` in ChromaDB)**:
-   - Converts each chunk into a high-dimensional mathematical vector using `nomic-embed-text`.
-   - **Meaning-Based Search**: If you ask *"How are requests authenticated?"*, the vector store locates `def verify_jwt_token()` even if the word *"authenticated"* is never explicitly used in that file.
-
-2. **Sparse Lexical Index (`bm25_store.index` via BM25Plus)**:
-   - Builds an inverted keyword index using code-aware tokenization (`camelCase`, `snake_case`, variable names).
-   - **Exact Keyword Match**: If you ask for a specific symbol like `MLModelContainer` or `calculate_loss()`, BM25 finds the exact matching occurrence instantly without semantic drift.
-
-| Index Type | Engine | Primary Strength | Weakness |
-| :--- | :--- | :--- | :--- |
-| **Dense Vector** | ChromaDB (`nomic-embed-text`) | Understands intent, questions, and conceptual descriptions. | Can miss exact variable or rare function names. |
-| **Sparse Lexical** | BM25Plus | 100% precision on exact symbol, variable, and class names. | Does not understand synonyms or natural language. |
-
-### 4. Hybrid Reciprocal Rank Fusion (RRF)
-- Combines semantic vector similarity with BM25 keyword relevance using Reciprocal Rank Fusion:
-  $$\text{RRF Score}(d) = \frac{1}{60 + \text{rank}_{\text{vector}}(d)} + \frac{1}{60 + \text{rank}_{\text{bm25}}(d)}$$
-- Eliminates vector hallucination while ensuring rare variable and function names are retrieved accurately.
-
-### 5. Corrective LangGraph State Machine
-Queries run through a deterministic LangGraph workflow:
-1. **Analyze Query**: Identifies user intent (`symbol_lookup`, `api_endpoint`, `code_explanation`) and extracts key code entities.
-2. **Hybrid Retrieval**: Fetches top-$K$ candidate chunks.
-3. **Relevance Grading**: Evaluates whether retrieved snippets contain the requested symbols.
-4. **Corrective Query Rewriting**: If relevance checks fail, automatically rewrites the query with symbol aliases and re-retrieves.
-5. **Grounded Generation**: Feeds the strictly bounded context into **OLMo** (or `llama3.2:latest`) with instructions to produce an explanation and exact file/line citations.
+1. **Dense Vector Index (ChromaDB + `nomic-embed-text` / `all-minilm`)**:
+   - Converts each chunk into a mathematical vector representation.
+   - **Semantic Understanding**: If a user asks *"Where is user authentication handled?"*, the vector store locates `def verify_jwt_token()` even if the word *"authenticated"* is never explicitly used in that file.
+2. **Sparse Lexical Index (BM25Plus with Code Tokenizer)**:
+   - Uses an inverted index with code-aware tokenization (`camelCase`, `snake_case`, identifiers, variable names).
+   - **Exact Symbol Matching**: If a user queries for `EngineGroupedStackingRegressor` or `calculate_loss()`, BM25 matches the exact symbol with 100% precision without semantic drift.
 
 ---
 
-## 🚀 Getting Started
+### 4. Hybrid Reciprocal Rank Fusion (RRF) (`src/code_rag/rag/retriever.py`)
+Combines results from both the vector store and BM25 using Reciprocal Rank Fusion:
+
+$$\text{RRF Score}(d) = \frac{1}{60 + \text{rank}_{\text{vector}}(d)} + \frac{1}{60 + \text{rank}_{\text{bm25}}(d)}$$
+
+- **Exact Path Boosting**: If a user explicitly asks for a file (e.g., `main.py` or `src/config.py`), exact path matching prioritizes that complete file chunk with high confidence.
+- **Deduplication**: Merges overlapping symbols and ranks the highest-quality candidate chunks for the LLM prompt.
+
+---
+
+### 5. Corrective LangGraph State Machine (`src/code_rag/rag/graph.py`)
+Queries run through a deterministic state graph:
+1. **Analyze Query**: Detects user intent (`symbol_lookup`, `file_retrieval`, `code_explanation`, `architecture_overview`) and extracts symbols/file paths.
+2. **User-Pasted Code Extraction**: If the user pastes raw code in the query and asks to explain it, the pipeline skips repository retrieval and routes directly to the **Line-by-Line Code Explainer**.
+3. **Hybrid Retrieval**: Fetches top-$K$ candidate chunks using RRF.
+4. **Relevance Grading**: Verifies if retrieved code chunks answer the user's question. If irrelevant, triggers query rewriting to re-retrieve with alternate symbol names.
+5. **Grounded Generation**: Feeds strictly bounded context to local Ollama LLMs with instructions to cite exact file paths, line ranges, and symbols.
+
+---
+
+### 6. Real-Time Streaming & ChatGPT-Style UI (`src/code_rag/static/`)
+- **Server-Sent Events (SSE)**: Streams tokens in real time directly from the server to the browser (`/api/query/stream`).
+- **Instant Response (<0.5s)**: Complete source file requests stream immediately with a smooth line-by-line typing animation followed by the AI explanation.
+- **ChatGPT-Style Code Block Header**:
+  - **Language Tag**: Displays detected language (`python`, `typescript`, `cpp`, `html`, etc.).
+  - **Copy Button**: One-click full code copying with checkmark feedback.
+  - **Download Button**: One-click download with matching file extension (`.py`, `.js`, `.ts`, `.css`, `.html`, `.cpp`, `.c`, `.rs`, `.go`, etc.) and matching filename.
+- **Interactive Repository Management**:
+  - Delete any specific indexed repository with one click.
+  - Delete button stays hidden by default and smoothly reveals on hover.
+- **Dynamic Navbar `+` Button**:
+  - When the sidebar is collapsed or hidden, a dedicated `+ New Chat` button automatically appears in the top navigation bar (with `Ctrl+N` / `Cmd+N` shortcut).
+
+---
+
+## ⚡ Key Features
+
+| Feature | Description |
+| :--- | :--- |
+| **AST Code Parsing** | Parses Python AST nodes (classes, methods, functions) with exact line bounds. |
+| **Hybrid RRF Search** | Dense embeddings (ChromaDB) + Sparse lexical index (BM25Plus) for high retrieval precision. |
+| **Corrective LangGraph** | Self-correcting state machine that grades relevance and rewrites queries when needed. |
+| **ChatGPT-Style Streaming** | Instant startup (<0.5s) with real-time line-by-line code typing animation. |
+| **One-Click Copy & Download** | Download any code block with the correct file extension and exact name. |
+| **Line-by-Line Explainer** | Paste any code snippet and get an in-depth breakdown of every line. |
+| **Hover-to-Delete Repos** | Easily remove specific indexed repositories from vector and keyword storage. |
+| **Local & Private** | Runs 100% locally with Ollama (`llama3.2`, `olmo`) — zero API keys or external data leaks. |
+
+---
+
+## 🚀 Quickstart & Installation
 
 ### 1. Prerequisites
 - **Python 3.9+**
-- **[Ollama](https://ollama.com)** installed and running locally:
+- **[Ollama](https://ollama.com)** installed and running:
 
 ```bash
-# Pull the embedding model (required for vector search)
+# Pull the embedding model
 ollama pull nomic-embed-text
 
 # Pull the LLM model
 ollama pull llama3.2:latest
-# (or ollama pull olmo)
 ```
 
-### 2. Installation
-Clone the repository and install the dependencies:
+### 2. Clone & Install Dependencies
 
 ```bash
-git clone <your-repo-url>
-cd "git read RAG"
+git clone https://github.com/ashikhasanredoy/Github-repositories-read-RAG.git
+cd Github-repositories-read-RAG
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Launch the Application
-Start the FastAPI server and web interface:
+### 3. Launch the Server
 
 ```bash
-python run.py
+python3 run.py
 ```
 
-The web application will be live at **[http://localhost:8000](http://localhost:8000)**.
+Open your browser at **[http://localhost:8000](http://localhost:8000)**.
 
 ---
 
-## 🖥️ How to Use
+## 🖥️ User Guide & Examples
 
-### Step 1: Ingest a Codebase
-1. Open [`http://localhost:8000`](http://localhost:8000) in your browser.
-2. In the sidebar under **Ingest Repository**, enter either:
-   - A public GitHub URL (e.g. `https://github.com/pallets/flask`)
-   - A local path (e.g. `./tests/sample_repo`)
-3. Click **Index Repository**. The system will clone, parse the AST, generate embeddings, and build the BM25 index.
+### Ingesting a Codebase
+1. Enter a GitHub URL (e.g. `https://github.com/pallets/flask`) or a local directory path in the sidebar.
+2. Click **Index Repository**.
+3. The system parses AST structures, computes embeddings, and builds the BM25 index.
 
-### Step 2: Select Active Repository & Model
-- Use the **Active Repository** dropdown in the sidebar to switch between indexed projects.
-- The **Model** selector automatically detects your installed Ollama models.
-
-### Step 3: Ask Codebase Questions
-Type your question in the chat input bar or click one of the quick query pills:
-- *"Where is the prediction API endpoint implemented?"*
-- *"Explain the pipeline workflow and how data flows through the system."*
-- *"Which function handles authentication or token verification?"*
-
-### Step 4: Review Answers & Exact Citations
-- Read the synthesized natural language explanation.
-- Inspect the **Sources & Citations** cards to see exact file paths, line ranges (e.g., `Lines: 15–48`), and the raw code blocks.
-- Expand the **Execution Trace** to see the LangGraph steps (Intent analysis, RRF retrieval stats, relevance grading).
+### Example Prompts to Try:
+- **Full File Retrieval**: `"give me main.py file"`
+- **Line-by-Line Explanation**:
+  ```text
+  explain this code line by line:
+  
+  def predict(features):
+      scaled = scaler.transform(features)
+      return model.predict(scaled)
+  ```
+- **Architecture & Workflow**: `"Explain the data preprocessing and model evaluation workflow."`
+- **Symbol Lookup**: `"Where is the Voting Ensemble created and what models are included?"`
 
 ---
 
-## 🔌 REST API Endpoints
+## 🔌 REST API Reference
 
-You can also interact with the system programmatically via REST API:
-
-| Endpoint | Method | Description | Example Payload |
-| :--- | :--- | :--- | :--- |
-| `/api/health` | `GET` | Health check & active Ollama status | — |
-| `/api/models` | `GET` | Lists available local Ollama LLMs | — |
-| `/api/repos` | `GET` | Lists all indexed repository collections | — |
-| `/api/index` | `POST` | Clones and indexes a repository | `{"repo_source": "https://github.com/...", "force_reindex": false}` |
-| `/api/query` | `POST` | Runs the full LangGraph RAG pipeline | `{"repo_id": "flask", "question": "Where is route registered?"}` |
-
-### API Query Example:
-```bash
-curl -X POST http://localhost:8000/api/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repo_id": "sample_repo",
-    "question": "Where is the prediction API implemented?"
-  }'
-```
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `GET /api/health` | `GET` | Health check & Ollama connection status |
+| `GET /api/models` | `GET` | List available local Ollama LLMs |
+| `GET /api/repos` | `GET` | List all indexed repository collections |
+| `POST /api/index` | `POST` | Clones, parses, and indexes a repository |
+| `POST /api/query` | `POST` | Executes standard RAG pipeline (returns JSON answer + citations) |
+| `POST /api/query/stream` | `POST` | SSE endpoint for real-time token-by-token streaming |
+| `DELETE /api/repos/{repo_id}` | `DELETE` | Deletes a repository collection from ChromaDB, BM25, and disk |
 
 ---
 
-## 📁 Project Structure
+## 📁 Repository Structure
 
 ```
-git read RAG/
+Github-repositories-read-RAG/
 ├── assets/
-│   └── pipeline_diagram.jpg     # Architecture hand-drawn diagram
+│   └── pipeline_diagram.jpg     # Architecture diagram
 ├── data/
-│   ├── chroma_db/               # Persistent ChromaDB vector storage
-│   ├── bm25/                    # Serialized BM25 keyword indices
-│   └── repos/                   # Shallow-cloned Git repositories
+│   ├── chroma_db/               # Persistent ChromaDB vector database
+│   ├── bm25/                    # Serialized BM25Plus keyword indices
+│   └── repos/                   # Cloned repository working copies
 ├── src/
 │   └── code_rag/
-│       ├── config.py            # Pydantic system settings & file ignore rules
+│       ├── config.py            # System configuration & file ignore rules
 │       ├── api/
-│       │   └── main.py          # FastAPI REST endpoints & static file mounting
+│       │   ├── main.py          # FastAPI application & REST/SSE endpoints
+│       │   └── schemas.py       # Pydantic request/response schemas
 │       ├── core/
-│       │   ├── cloner.py        # Shallow Git cloner with caching & sanitization
-│       │   ├── parser.py        # Python AST & multi-language symbol extractor
-│       │   ├── chunker.py       # Syntax-aware chunker with start/end line bounds
-│       │   └── models.py        # CodeChunk, RepoMetadata Pydantic models
+│       │   ├── cloner.py        # Shallow Git cloner & local path resolver
+│       │   ├── parser.py        # AST symbol extractor & line bound parser
+│       │   ├── chunker.py       # Code chunker with syntax boundaries
+│       │   └── models.py        # CodeChunk, RepoMetadata data models
 │       ├── storage/
-│       │   ├── vector_store.py  # ChromaDB vector store manager
-│       │   └── bm25_store.py    # BM25Plus indexer with code-aware tokenizer
+│       │   ├── vector_store.py  # ChromaDB dense vector store manager
+│       │   └── bm25_store.py    # BM25Plus sparse indexer & code tokenizer
 │       ├── rag/
-│       │   ├── retriever.py     # Hybrid RRF search & context builder
+│       │   ├── retriever.py     # Hybrid RRF fusion retriever & context builder
 │       │   ├── state.py         # LangGraph TypedDict state
-│       │   └── graph.py         # LangGraph StateGraph (Analyze -> Retrieve -> Grade -> Rewrite -> Generate)
+│       │   └── graph.py         # LangGraph workflow & real-time streaming engine
 │       ├── services/
-│       │   └── ollama.py        # Ollama client with auto-discovery & safe context bounding
+│       │   └── ollama.py        # Ollama client with dynamic context scaling
 │       └── static/
-│           ├── index.html       # Clean web interface
-│           ├── styles.css       # Warm editorial aesthetic stylesheet
-│           └── app.js           # Client UI logic & Prism syntax highlighting
-├── requirements.txt             # Python dependencies
-├── run.py                       # Server entrypoint launcher
+│           ├── index.html       # Web application UI
+│           ├── styles.css       # Modern dark/light theme design system
+│           └── app.js           # Frontend client logic & event listeners
+├── requirements.txt             # Python project dependencies
+├── run.py                       # Application launcher
 └── README.md                    # Project documentation
 ```
 
