@@ -1119,6 +1119,41 @@ html, body {
     position: relative;
 }
 
+/* Queued User Message Styling */
+.msg-row.user.msg-queued .msg-bubble {
+    border-style: dashed;
+    border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(31, 41, 55, 0.7);
+    box-shadow: 0 0 14px rgba(99, 102, 241, 0.15);
+}
+
+.msg-queued-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.queued-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgba(99, 102, 241, 0.18);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    border-radius: var(--radius-full);
+    font-size: 0.7rem;
+    color: var(--primary-color);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    animation: queuePulse 2s infinite ease-in-out;
+}
+
+@keyframes queuePulse {
+    0%, 100% { opacity: 0.85; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.02); }
+}
+
 /* User Message Action Buttons (Edit, Delete, Copy) */
 .user-msg-actions {
     display: flex;
@@ -1529,7 +1564,7 @@ html, body {
     background: var(--accent-cyan);
 }
 
-/* Loading Box & Live Timer Badge */
+/* Loading Box */
 .loading-box {
     display: flex;
     align-items: center;
@@ -1538,38 +1573,22 @@ html, body {
     font-size: 0.85rem;
 }
 
-.stream-status-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.stream-timer-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 7px;
-    background: rgba(99, 102, 241, 0.12);
-    border: 1px solid rgba(99, 102, 241, 0.28);
-    border-radius: var(--radius-full);
-    color: var(--primary-color);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.725rem;
-    font-weight: 600;
-}
-
 .time-elapsed-meta {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     color: var(--text-muted);
-    font-size: 0.725rem;
+    font-size: 0.75rem;
     font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
     margin-left: auto;
-    padding: 3px 6px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 4px;
+    padding: 2px 6px;
+    opacity: 0.85;
+}
+
+.time-elapsed-meta:hover {
+    opacity: 1;
+    color: var(--text-secondary);
 }
 
 /* ==========================================================================

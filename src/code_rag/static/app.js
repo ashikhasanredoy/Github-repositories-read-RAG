@@ -42,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
         : ".";
 
     let isSubmitting = false;
+    let queryQueue = [];
     let conversations = [];
     let activeConvId = null;
     let chatHistory = [];
@@ -142,11 +143,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function startNewConversation(shouldToast = true) {
+        queryQueue = [];
         activeConvId = "conv_" + Date.now();
         chatHistory = [];
         saveConversationsToMemory();
         restoreActiveChatUI();
         renderConversationsList();
+        if (queryInput) {
+            queryInput.value = "";
+            queryInput.style.height = "auto";
+            queryInput.focus();
+        }
+        if (chatContainer) {
+            chatContainer.scrollTop = 0;
+        }
         if (shouldToast) {
             showToast("New conversation started", "info", 2000);
         }
@@ -154,6 +164,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function selectConversation(convId) {
         if (activeConvId === convId) return;
+        queryQueue = [];
         activeConvId = convId;
         saveConversationsToMemory();
         restoreActiveChatUI();
@@ -196,7 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     textDiv.className = "markdown-body";
                     renderMarkdown(textDiv, item.text || "");
                     bubble.appendChild(textDiv);
-                    renderExtras(bubble, item.sources || [], item.traceSteps || [], item.text || "");
+                    renderExtras(bubble, item.sources || [], item.traceSteps || [], item.text || "", item.elapsedTime || null);
                 }
             });
             chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -280,7 +291,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return conv.messages.length - 1;
     }
 
-    function recordBotMessageInConversation(text, sources, traceSteps) {
+    function recordBotMessageInConversation(text, sources, traceSteps, elapsedTime = null) {
         let conv = conversations.find(c => c.id === activeConvId);
         if (conv) {
             conv.timestamp = Date.now();
@@ -288,7 +299,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 type: "bot",
                 text: text,
                 sources: sources || [],
-                traceSteps: traceSteps || []
+                traceSteps: traceSteps || [],
+                elapsedTime: elapsedTime || null
             });
             chatHistory = conv.messages;
             saveConversationsToMemory();
@@ -302,15 +314,26 @@ document.addEventListener("DOMContentLoaded", () => {
     function setupEventListeners() {
         // New Conversation Buttons (Sidebar & Navbar)
         if (newChatBtn) {
-            newChatBtn.addEventListener("click", () => {
+            newChatBtn.addEventListener("click", (e) => {
+                e.preventDefault();
                 startNewConversation(true);
             });
         }
         if (navNewChatBtn) {
-            navNewChatBtn.addEventListener("click", () => {
+            navNewChatBtn.addEventListener("click", (e) => {
+                e.preventDefault();
                 startNewConversation(true);
             });
         }
+
+        // Delegated click listener for any new chat button
+        document.addEventListener("click", (e) => {
+            const btn = e.target.closest("#navNewChatBtn, #newChatBtn, .nav-new-chat-btn, .btn-new-chat");
+            if (btn) {
+                e.preventDefault();
+                startNewConversation(true);
+            }
+        });
         // Quick suggestions chips
         document.querySelectorAll(".q-chip").forEach(chip => {
             chip.addEventListener("click", () => {
@@ -363,6 +386,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Clear chat (resets active conversation)
         if (clearChatBtn) {
             clearChatBtn.addEventListener("click", () => {
+                queryQueue = [];
                 if (activeConvId) {
                     const conv = conversations.find(c => c.id === activeConvId);
                     if (conv) {
@@ -794,7 +818,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Query Submission & Streaming
+    // Query Submission & Streaming with Question Queueing
     if (queryForm) {
         queryForm.addEventListener("submit", (e) => {
             e.preventDefault();
@@ -802,12 +826,75 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    async function submitUserQuery() {
-        if (isSubmitting) return;
+    async function submitUserQuery(customQuestion = null, existingRowEl = null, existingMsgIndex = null) {
+        // If system is already generating/streaming an answer, add subsequent question to queue
+        if (isSubmitting) {
+            const q = customQuestion !== null ? customQuestion : (queryInput ? queryInput.value.trim() : "");
+            if (!q) {
+                if (queryInput) queryInput.focus();
+                return;
+            }
 
-        const q = queryInput.value.trim();
+            let repo = repoSelect ? repoSelect.value : "";
+            if (!repo && repoSelect && repoSelect.options && repoSelect.options.length > 0) {
+                for (let i = 0; i < repoSelect.options.length; i++) {
+                    if (repoSelect.options[i].value) {
+                        repoSelect.selectedIndex = i;
+                        repo = repoSelect.options[i].value;
+                        updateSelectedRepoUI();
+                        break;
+                    }
+                }
+            }
+
+            if (!repo) {
+                showToast("Please index or select a target repository first from the sidebar.", "warning", 3500);
+                if (repoSourceInput) repoSourceInput.focus();
+                return;
+            }
+
+            // Hide welcome hero when conversation begins
+            if (welcomeHero && welcomeHero.parentNode === chatContainer) {
+                welcomeHero.remove();
+            }
+
+            autoScrollEnabled = true;
+
+            // Persist User Message to conversation memory and render with queued styling
+            const userMsgIndex = recordUserMessageInConversation(q);
+            const queuedRow = appendMsg("user", q, userMsgIndex);
+            queuedRow.classList.add("msg-queued");
+
+            const bubble = queuedRow.querySelector(".msg-bubble");
+            if (bubble) {
+                const queueHeader = document.createElement("div");
+                queueHeader.className = "msg-queued-header";
+                queueHeader.innerHTML = `<span class="queued-status-pill">⏳ In Queue (#${queryQueue.length + 1})</span>`;
+                bubble.insertBefore(queueHeader, bubble.firstChild);
+            }
+
+            if (queryInput) {
+                queryInput.value = "";
+                queryInput.style.height = "auto";
+            }
+
+            queryQueue.push({
+                id: Date.now(),
+                question: q,
+                rowEl: queuedRow,
+                userMsgIndex: userMsgIndex
+            });
+
+            showToast(`Question added to queue (Position #${queryQueue.length})`, "info", 2000);
+            if (chatContainer && autoScrollEnabled) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+            return;
+        }
+
+        const q = customQuestion !== null ? customQuestion : (queryInput ? queryInput.value.trim() : "");
         if (!q) {
-            queryInput.focus();
+            if (queryInput) queryInput.focus();
             return;
         }
 
@@ -839,36 +926,35 @@ document.addEventListener("DOMContentLoaded", () => {
         // Reset autoscroll on new user message
         autoScrollEnabled = true;
 
-        // Persist User Message to conversation memory and append to UI
-        const userMsgIndex = recordUserMessageInConversation(q);
-        appendMsg("user", q, userMsgIndex);
+        let userMsgIndex;
+        if (existingRowEl) {
+            // Unmark queued state
+            existingRowEl.classList.remove("msg-queued");
+            const qHeader = existingRowEl.querySelector(".msg-queued-header");
+            if (qHeader) qHeader.remove();
+            userMsgIndex = existingMsgIndex !== null ? existingMsgIndex : parseInt(existingRowEl.dataset.msgIndex || "0", 10);
+        } else {
+            // Persist User Message to conversation memory and append to UI
+            userMsgIndex = recordUserMessageInConversation(q);
+            appendMsg("user", q, userMsgIndex);
+            if (queryInput) {
+                queryInput.value = "";
+                queryInput.style.height = "auto";
+            }
+        }
 
-        queryInput.value = "";
-        queryInput.style.height = "auto";        const startTime = performance.now();
-        let timerSeconds = 0;
+        const startTime = performance.now();
 
-        // Append Loading Bot Message with live counting timer
+        // Append Loading Bot Message
         const botMsg = appendMsg("bot", `
             <div class="loading-box">
                 <span class="spinner" style="border-color: rgba(99, 102, 241, 0.2); border-top-color: var(--primary-color);"></span>
-                <div class="stream-status-wrapper">
-                    <span class="stream-status">Analyzing intent & searching AST symbols...</span>
-                    <span class="stream-timer-badge">⏱️ <span class="stream-timer-val">0</span>s</span>
-                </div>
+                <span class="stream-status">Analyzing intent & searching AST symbols...</span>
             </div>
         `, userMsgIndex + 1);
         const contentEl = botMsg.querySelector(".msg-bubble");
 
-        const timerInterval = setInterval(() => {
-            timerSeconds++;
-            const timerValEl = contentEl.querySelector(".stream-timer-val");
-            if (timerValEl) {
-                timerValEl.textContent = timerSeconds;
-            }
-        }, 1000);
-
         isSubmitting = true;
-        if (sendBtn) sendBtn.disabled = true;
 
         let accumulatedAnswer = "";
         let sources = [];
@@ -970,9 +1056,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             renderExtras(contentEl, sources, traceSteps, accumulatedAnswer, finalElapsedSec);
 
-            // Persist bot message to active conversation
+            // Persist bot message to active conversation with generation time
             if (accumulatedAnswer) {
-                recordBotMessageInConversation(accumulatedAnswer, sources, traceSteps);
+                recordBotMessageInConversation(accumulatedAnswer, sources, traceSteps, finalElapsedSec);
             }
 
         } catch (err) {
@@ -984,13 +1070,26 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
             showToast(err.message, "error");
         } finally {
-            clearInterval(timerInterval);
             isSubmitting = false;
-            if (sendBtn) sendBtn.disabled = false;
             if (autoScrollEnabled && chatContainer) {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
-        }      updateScrollState();
+            updateScrollState();
+
+            // Process next queued query automatically
+            if (queryQueue.length > 0) {
+                const nextItem = queryQueue.shift();
+
+                // Update remaining queue pills
+                queryQueue.forEach((item, idx) => {
+                    const pill = item.rowEl.querySelector(".queued-status-pill");
+                    if (pill) pill.textContent = `⏳ In Queue (#${idx + 1})`;
+                });
+
+                setTimeout(() => {
+                    submitUserQuery(nextItem.question, nextItem.rowEl, nextItem.userMsgIndex);
+                }, 300);
+            }
         }
     }
 
@@ -1045,7 +1144,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (deleteBtn) {
                 deleteBtn.addEventListener("click", () => {
                     const currentIdx = row.dataset.msgIndex !== undefined ? parseInt(row.dataset.msgIndex, 10) : msgIndex;
-                    deleteQuestionAt(currentIdx);
+                    deleteQuestionAt(currentIdx, row);
                 });
             }
 
@@ -1081,7 +1180,27 @@ document.addEventListener("DOMContentLoaded", () => {
         return row;
     }
 
-    function deleteQuestionAt(index) {
+    function deleteQuestionAt(index, rowEl = null) {
+        if (rowEl && rowEl.classList.contains("msg-queued")) {
+            const qIdx = queryQueue.findIndex(item => item.rowEl === rowEl || item.userMsgIndex === index);
+            if (qIdx !== -1) {
+                queryQueue.splice(qIdx, 1);
+            }
+            rowEl.remove();
+            let conv = conversations.find(c => c.id === activeConvId);
+            if (conv && conv.messages && index !== null && index !== undefined && index < conv.messages.length) {
+                conv.messages.splice(index, 1);
+                chatHistory = conv.messages;
+                saveConversationsToMemory();
+            }
+            queryQueue.forEach((item, idx) => {
+                const pill = item.rowEl.querySelector(".queued-status-pill");
+                if (pill) pill.textContent = `⏳ In Queue (#${idx + 1})`;
+            });
+            showToast("Queued question removed", "info", 2000);
+            return;
+        }
+
         if (isSubmitting) {
             showToast("Please wait for the current query to finish", "warning");
             return;
