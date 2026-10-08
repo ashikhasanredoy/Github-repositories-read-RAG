@@ -827,6 +827,58 @@ html, body {
     background: var(--card-hover);
 }
 
+.nav-new-chat-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 7px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-sm);
+}
+
+.nav-new-chat-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--primary-color);
+    background: var(--card-hover);
+    transform: scale(1.05);
+}
+
+.nav-new-chat-btn:active {
+    transform: scale(0.95);
+}
+
+/* When sidebar is collapsed on desktop, show new conversation button in top navbar */
+.sidebar.collapsed ~ .main-content .nav-new-chat-btn {
+    display: inline-flex;
+    animation: fadeInScale 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* On mobile (<=900px), sidebar is hidden by default, so show new conversation button unless opened */
+@media (max-width: 900px) {
+    .sidebar:not(.open) ~ .main-content .nav-new-chat-btn {
+        display: inline-flex;
+    }
+    .sidebar.open ~ .main-content .nav-new-chat-btn {
+        display: none !important;
+    }
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.85);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 .header-title {
     font-size: 1.05rem;
     font-weight: 700;

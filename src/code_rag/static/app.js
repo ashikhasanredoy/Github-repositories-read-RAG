@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const ingestSpinner = document.getElementById("ingestSpinner");
     const ingestAlert = document.getElementById("ingestAlert");
     const newChatBtn = document.getElementById("newChatBtn");
+    const navNewChatBtn = document.getElementById("navNewChatBtn");
     const conversationsList = document.getElementById("conversationsList");
     const repoSelect = document.getElementById("repoSelect");
     const deleteRepoBtn = document.getElementById("deleteRepoBtn");
@@ -299,9 +300,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Event Listeners & UI Helpers
     // =========================================================================
     function setupEventListeners() {
-        // New Conversation Button
+        // New Conversation Buttons (Sidebar & Navbar)
         if (newChatBtn) {
             newChatBtn.addEventListener("click", () => {
+                startNewConversation(true);
+            });
+        }
+        if (navNewChatBtn) {
+            navNewChatBtn.addEventListener("click", () => {
                 startNewConversation(true);
             });
         }
@@ -385,11 +391,14 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Global shortcut Ctrl+B / Cmd+B to toggle sidebar
+        // Global shortcut Ctrl+B / Cmd+B to toggle sidebar, Ctrl+N / Alt+N to new chat
         document.addEventListener("keydown", (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
                 e.preventDefault();
                 if (sidebarToggleBtn) sidebarToggleBtn.click();
+            } else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") || (e.altKey && e.key.toLowerCase() === "n")) {
+                e.preventDefault();
+                startNewConversation(true);
             }
         });
 
