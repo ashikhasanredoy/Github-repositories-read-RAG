@@ -33,6 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const repoMeta = document.getElementById("repoMeta");
     const welcomeHero = document.getElementById("welcomeHero");
     const toastContainer = document.getElementById("toastContainer");
+    const scrollBottomBtn = document.getElementById("scrollBottomBtn");
 
     const LOCAL_WORKSPACE_PATH = window.location.origin.includes("localhost") 
         ? "/Users/macbookpro/Downloads/Github-repositories-read-RAG" 
@@ -42,6 +43,26 @@ document.addEventListener("DOMContentLoaded", () => {
     let conversations = [];
     let activeConvId = null;
     let chatHistory = [];
+    let autoScrollEnabled = true;
+
+    // Helper to test if user is near bottom of chat
+    function isNearBottom(threshold = 90) {
+        if (!chatContainer) return true;
+        return (chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight) <= threshold;
+    }
+
+    function updateScrollState() {
+        if (!chatContainer) return;
+        const nearBottom = isNearBottom(100);
+        autoScrollEnabled = nearBottom;
+        if (scrollBottomBtn) {
+            if (!nearBottom && chatContainer.scrollHeight > chatContainer.clientHeight + 100) {
+                scrollBottomBtn.classList.add("visible");
+            } else {
+                scrollBottomBtn.classList.remove("visible");
+            }
+        }
+    }
 
     // Initialize application
     init();
@@ -163,11 +184,11 @@ document.addEventListener("DOMContentLoaded", () => {
         chatHistory = currentConv ? (currentConv.messages || []) : [];
 
         if (chatHistory.length > 0) {
-            chatHistory.forEach(item => {
+            chatHistory.forEach((item, index) => {
                 if (item.type === "user") {
-                    appendMsg("user", escapeHtml(item.text));
+                    appendMsg("user", item.text, index);
                 } else if (item.type === "bot") {
-                    const row = appendMsg("bot", "");
+                    const row = appendMsg("bot", "", index);
                     const bubble = row.querySelector(".msg-bubble");
                     const textDiv = document.createElement("div");
                     textDiv.className = "markdown-body";
@@ -182,6 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 chatContainer.appendChild(welcomeHero);
             }
         }
+        updateScrollState();
     }
 
     function renderConversationsList() {
@@ -253,6 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
         chatHistory = conv.messages;
         saveConversationsToMemory();
         renderConversationsList();
+        return conv.messages.length - 1;
     }
 
     function recordBotMessageInConversation(text, sources, traceSteps) {
@@ -426,6 +449,31 @@ document.addEventListener("DOMContentLoaded", () => {
                     deleteRepoBtn.innerHTML = originalContent;
                     updateSelectedRepoUI();
                 }
+            });
+        }
+
+        // Chat Container Scroll Detection for Non-Intrusive Streaming
+        if (chatContainer) {
+            chatContainer.addEventListener("scroll", updateScrollState, { passive: true });
+            chatContainer.addEventListener("wheel", () => {
+                setTimeout(updateScrollState, 40);
+            }, { passive: true });
+            chatContainer.addEventListener("touchmove", () => {
+                setTimeout(updateScrollState, 40);
+            }, { passive: true });
+        }
+
+        // Scroll to Bottom Button Click
+        if (scrollBottomBtn) {
+            scrollBottomBtn.addEventListener("click", () => {
+                autoScrollEnabled = true;
+                if (chatContainer) {
+                    chatContainer.scrollTo({
+                        top: chatContainer.scrollHeight,
+                        behavior: "smooth"
+                    });
+                }
+                scrollBottomBtn.classList.remove("visible");
             });
         }
     }
@@ -693,9 +741,12 @@ document.addEventListener("DOMContentLoaded", () => {
             welcomeHero.remove();
         }
 
-        // Append User Message and persist to conversation memory
-        appendMsg("user", escapeHtml(q));
-        recordUserMessageInConversation(q);
+        // Reset autoscroll on new user message
+        autoScrollEnabled = true;
+
+        // Persist User Message to conversation memory and append to UI
+        const userMsgIndex = recordUserMessageInConversation(q);
+        appendMsg("user", q, userMsgIndex);
 
         queryInput.value = "";
         queryInput.style.height = "auto";
@@ -706,7 +757,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span class="spinner" style="border-color: rgba(99, 102, 241, 0.2); border-top-color: var(--primary-color);"></span>
                 <span class="stream-status">Analyzing intent & searching AST symbols...</span>
             </div>
-        `);
+        `, userMsgIndex + 1);
         const contentEl = botMsg.querySelector(".msg-bubble");
 
         isSubmitting = true;
@@ -736,6 +787,26 @@ document.addEventListener("DOMContentLoaded", () => {
             const decoder = new TextDecoder();
             let buffer = "";
             let textDiv = null;
+            let renderPending = false;
+            let lastRenderTime = 0;
+
+            const scheduleRender = (force = false) => {
+                const now = performance.now();
+                if (force || (now - lastRenderTime >= 30 && !renderPending)) {
+                    renderPending = true;
+                    requestAnimationFrame(() => {
+                        if (textDiv) {
+                            renderFastMarkdown(textDiv, accumulatedAnswer);
+                            // Only auto-scroll if user has not scrolled up to read previous context
+                            if (autoScrollEnabled && chatContainer) {
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            }
+                        }
+                        lastRenderTime = performance.now();
+                        renderPending = false;
+                    });
+                }
+            };
 
             while (true) {
                 const { value, done } = await reader.read();
@@ -762,8 +833,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                     contentEl.appendChild(textDiv);
                                 }
                                 accumulatedAnswer += data.content;
-                                renderMarkdown(textDiv, accumulatedAnswer);
-                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                                scheduleRender();
                             } else if (data.type === "done") {
                                 sources = data.sources || [];
                                 if (data.trace_steps) traceSteps = data.trace_steps;
@@ -781,8 +851,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 contentEl.innerHTML = "";
                 textDiv = document.createElement("div");
                 textDiv.className = "markdown-body";
-                renderMarkdown(textDiv, accumulatedAnswer);
                 contentEl.appendChild(textDiv);
+            }
+
+            if (textDiv) {
+                renderMarkdown(textDiv, accumulatedAnswer);
             }
 
             renderExtras(contentEl, sources, traceSteps, accumulatedAnswer);
@@ -803,20 +876,436 @@ document.addEventListener("DOMContentLoaded", () => {
         } finally {
             isSubmitting = false;
             if (sendBtn) sendBtn.disabled = false;
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            if (autoScrollEnabled && chatContainer) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+            updateScrollState();
         }
     }
 
     // =========================================================================
     // Rendering & Helpers
     // =========================================================================
-    function appendMsg(type, html) {
+    function appendMsg(type, textOrHtml, msgIndex = null) {
         const row = document.createElement("div");
         row.className = `msg-row ${type}`;
-        row.innerHTML = `<div class="msg-bubble">${html}</div>`;
+        if (msgIndex !== null && msgIndex !== undefined) {
+            row.dataset.msgIndex = msgIndex;
+        }
+
+        if (type === "user") {
+            const rawText = textOrHtml;
+            row.innerHTML = `
+                <div class="msg-bubble">${escapeHtml(rawText)}</div>
+                <div class="user-msg-actions">
+                    <button type="button" class="btn-user-action btn-edit-user-msg" title="Edit question">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                        <span>Edit</span>
+                    </button>
+                    <button type="button" class="btn-user-action btn-delete-user-msg" title="Delete question & answer">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        <span>Delete</span>
+                    </button>
+                    <button type="button" class="btn-user-action btn-copy-user-msg" title="Copy question">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span>Copy</span>
+                    </button>
+                </div>
+            `;
+
+            const editBtn = row.querySelector(".btn-edit-user-msg");
+            if (editBtn) {
+                editBtn.addEventListener("click", () => {
+                    const currentIdx = row.dataset.msgIndex !== undefined ? parseInt(row.dataset.msgIndex, 10) : msgIndex;
+                    startInlineEdit(row, rawText, currentIdx);
+                });
+            }
+
+            const deleteBtn = row.querySelector(".btn-delete-user-msg");
+            if (deleteBtn) {
+                deleteBtn.addEventListener("click", () => {
+                    const currentIdx = row.dataset.msgIndex !== undefined ? parseInt(row.dataset.msgIndex, 10) : msgIndex;
+                    deleteQuestionAt(currentIdx);
+                });
+            }
+
+            const copyBtn = row.querySelector(".btn-copy-user-msg");
+            if (copyBtn) {
+                copyBtn.addEventListener("click", async () => {
+                    await navigator.clipboard.writeText(rawText);
+                    copyBtn.innerHTML = `
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-emerald);">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span style="color: var(--accent-emerald);">Copied!</span>
+                    `;
+                    setTimeout(() => {
+                        copyBtn.innerHTML = `
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            <span>Copy</span>
+                        `;
+                    }, 1800);
+                });
+            }
+        } else {
+            row.innerHTML = `<div class="msg-bubble">${textOrHtml}</div>`;
+        }
+
         chatContainer.appendChild(row);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        if (type === "user" || autoScrollEnabled) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
         return row;
+    }
+
+    function deleteQuestionAt(index) {
+        if (isSubmitting) {
+            showToast("Please wait for the current query to finish", "warning");
+            return;
+        }
+
+        let conv = conversations.find(c => c.id === activeConvId);
+        if (!conv || !conv.messages || index === null || index === undefined || index >= conv.messages.length) return;
+
+        // If next message is bot answer, delete both question and answer
+        const isNextBot = (index + 1 < conv.messages.length) && conv.messages[index + 1].type === "bot";
+        const deleteCount = isNextBot ? 2 : 1;
+
+        conv.messages.splice(index, deleteCount);
+        chatHistory = conv.messages;
+
+        // If conversation is now empty, update title
+        if (conv.messages.length === 0) {
+            conv.title = "New Chat";
+        } else {
+            const firstUser = conv.messages.find(m => m.type === "user");
+            if (firstUser) {
+                conv.title = firstUser.text.slice(0, 36) + (firstUser.text.length > 36 ? "..." : "");
+            }
+        }
+
+        saveConversationsToMemory();
+        restoreActiveChatUI();
+        renderConversationsList();
+        showToast("Question deleted", "info", 2000);
+    }
+
+    function startInlineEdit(row, originalText, index) {
+        if (isSubmitting) {
+            showToast("Please wait for current response to finish before editing", "warning");
+            return;
+        }
+
+        const bubble = row.querySelector(".msg-bubble");
+        const actions = row.querySelector(".user-msg-actions");
+        if (bubble) bubble.style.display = "none";
+        if (actions) actions.style.display = "none";
+
+        const editContainer = document.createElement("div");
+        editContainer.className = "user-edit-container";
+        editContainer.innerHTML = `
+            <textarea class="user-edit-textarea" rows="2">${escapeHtml(originalText)}</textarea>
+            <div class="user-edit-buttons">
+                <button type="button" class="btn-edit-cancel">Cancel</button>
+                <button type="button" class="btn-edit-save">Save & Resubmit</button>
+            </div>
+        `;
+
+        row.appendChild(editContainer);
+        const textarea = editContainer.querySelector(".user-edit-textarea");
+        const cancelBtn = editContainer.querySelector(".btn-edit-cancel");
+        const saveBtn = editContainer.querySelector(".btn-edit-save");
+
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+        const cancel = () => {
+            editContainer.remove();
+            if (bubble) bubble.style.display = "";
+            if (actions) actions.style.display = "";
+        };
+
+        cancelBtn.addEventListener("click", cancel);
+
+        const submitEdit = () => {
+            const newText = textarea.value.trim();
+            if (!newText) {
+                showToast("Question cannot be empty", "warning");
+                textarea.focus();
+                return;
+            }
+
+            editContainer.remove();
+            resubmitEditedQuestion(index, newText);
+        };
+
+        saveBtn.addEventListener("click", submitEdit);
+        textarea.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitEdit();
+            } else if (e.key === "Escape") {
+                cancel();
+            }
+        });
+    }
+
+    async function resubmitEditedQuestion(index, newText) {
+        let conv = conversations.find(c => c.id === activeConvId);
+        if (!conv || !conv.messages) return;
+
+        // Truncate from this user message index onward
+        conv.messages = conv.messages.slice(0, index);
+        chatHistory = conv.messages;
+        saveConversationsToMemory();
+        restoreActiveChatUI();
+
+        // Submit the new text
+        if (queryInput) {
+            queryInput.value = newText;
+        }
+        await submitUserQuery();
+    }
+
+    const LANG_EXTENSION_MAP = {
+        python: "py",
+        py: "py",
+        javascript: "js",
+        js: "js",
+        typescript: "ts",
+        ts: "ts",
+        tsx: "tsx",
+        jsx: "jsx",
+        html: "html",
+        htm: "html",
+        css: "css",
+        scss: "scss",
+        sass: "sass",
+        less: "less",
+        cpp: "cpp",
+        "c++": "cpp",
+        c: "c",
+        h: "h",
+        hpp: "hpp",
+        cs: "cs",
+        csharp: "cs",
+        java: "java",
+        kotlin: "kt",
+        kt: "kt",
+        swift: "swift",
+        rust: "rs",
+        rs: "rs",
+        go: "go",
+        golang: "go",
+        ruby: "rb",
+        rb: "rb",
+        php: "php",
+        sql: "sql",
+        json: "json",
+        yaml: "yaml",
+        yml: "yaml",
+        toml: "toml",
+        xml: "xml",
+        svg: "svg",
+        bash: "sh",
+        sh: "sh",
+        shell: "sh",
+        zsh: "sh",
+        markdown: "md",
+        md: "md",
+        text: "txt",
+        txt: "txt",
+        dockerfile: "dockerfile",
+        makefile: "makefile"
+    };
+
+    function getCodeBlockFilename(wrapper, lang) {
+        const rawLang = (lang || "").toLowerCase().trim();
+        const ext = LANG_EXTENSION_MAP[rawLang] || (rawLang.length <= 4 && rawLang.match(/^[a-z0-9]+$/) ? rawLang : "txt");
+
+        // Look for preceding filename mentions in headers or text
+        let prev = wrapper.previousElementSibling;
+        let count = 0;
+        while (prev && count < 5) {
+            const text = prev.textContent || "";
+            // Find patterns like `filename.ext` or path/to/file.ext
+            const match = text.match(/`?([a-zA-Z0-9_\-\.\/]+\.([a-zA-Z0-9_]+))`?/);
+            if (match && match[1]) {
+                const rawName = match[1].trim().replace(/^`|`$/g, "");
+                const parts = rawName.split("/").filter(Boolean);
+                const baseName = parts[parts.length - 1];
+                if (baseName && baseName.includes(".") && !baseName.endsWith(".")) {
+                    return baseName;
+                }
+            }
+            if (prev.tagName && prev.tagName.match(/^H[1-6]$/)) break;
+            prev = prev.previousElementSibling;
+            count++;
+        }
+
+        return `code.${ext}`;
+    }
+
+    function enhanceCodeBlocks(container) {
+        if (!container) return;
+        const pres = container.querySelectorAll("pre");
+        pres.forEach((pre) => {
+            if (pre.parentElement && pre.parentElement.classList.contains("code-block-wrapper")) {
+                return;
+            }
+
+            const codeEl = pre.querySelector("code");
+            let lang = "code";
+            if (codeEl) {
+                const match = codeEl.className.match(/language-([a-zA-Z0-9_-]+)/);
+                if (match && match[1]) {
+                    lang = match[1];
+                }
+            }
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "code-block-wrapper";
+
+            const header = document.createElement("div");
+            header.className = "code-block-header";
+            header.innerHTML = `
+                <span class="code-lang-label">${escapeHtml(lang)}</span>
+                <div class="code-block-actions">
+                    <button type="button" class="btn-code-action btn-copy-code" title="Copy code">
+                        <svg class="action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span class="action-text">Copy</span>
+                    </button>
+                    <button type="button" class="btn-code-action btn-download-code" title="Download file">
+                        <svg class="action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        <span class="action-text">Download</span>
+                    </button>
+                </div>
+            `;
+
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.appendChild(header);
+            wrapper.appendChild(pre);
+        });
+    }
+
+    // Delegated click handler for code block Copy and Download buttons
+    document.addEventListener("click", async (e) => {
+        // Copy Code Button
+        const copyBtn = e.target.closest(".btn-copy-code");
+        if (copyBtn) {
+            const wrapper = copyBtn.closest(".code-block-wrapper");
+            if (!wrapper) return;
+
+            const codeEl = wrapper.querySelector("pre code") || wrapper.querySelector("pre");
+            if (!codeEl) return;
+
+            const codeText = codeEl.innerText || codeEl.textContent || "";
+            
+            try {
+                await navigator.clipboard.writeText(codeText);
+                copyBtn.classList.add("copied");
+                copyBtn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-emerald);">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span class="action-text" style="color: var(--accent-emerald);">Copied!</span>
+                `;
+                showToast("Code copied to clipboard", "success", 2000);
+                setTimeout(() => {
+                    copyBtn.classList.remove("copied");
+                    copyBtn.innerHTML = `
+                        <svg class="action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span class="action-text">Copy</span>
+                    `;
+                }, 2000);
+            } catch (err) {
+                showToast("Failed to copy code", "error");
+            }
+            return;
+        }
+
+        // Download Code Button
+        const downloadBtn = e.target.closest(".btn-download-code");
+        if (downloadBtn) {
+            const wrapper = downloadBtn.closest(".code-block-wrapper");
+            if (!wrapper) return;
+
+            const codeEl = wrapper.querySelector("pre code") || wrapper.querySelector("pre");
+            if (!codeEl) return;
+
+            const langEl = wrapper.querySelector(".code-lang-label");
+            const lang = langEl ? langEl.textContent.trim() : "text";
+            const filename = getCodeBlockFilename(wrapper, lang);
+
+            const codeText = codeEl.innerText || codeEl.textContent || "";
+
+            try {
+                const blob = new Blob([codeText], { type: "text/plain;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                downloadBtn.classList.add("success");
+                downloadBtn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-emerald);">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span class="action-text" style="color: var(--accent-emerald);">Downloaded!</span>
+                `;
+                showToast(`Downloaded ${filename}`, "success", 2500);
+
+                setTimeout(() => {
+                    downloadBtn.classList.remove("success");
+                    downloadBtn.innerHTML = `
+                        <svg class="action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        <span class="action-text">Download</span>
+                    `;
+                }, 2200);
+            } catch (err) {
+                showToast("Failed to download file", "error");
+            }
+            return;
+        }
+    });
+
+    function renderFastMarkdown(element, markdownText) {
+        if (window.marked) {
+            element.innerHTML = marked.parse(markdownText, { breaks: true, gfm: true });
+        } else {
+            element.innerHTML = formatMarkdownFallback(markdownText);
+        }
+        enhanceCodeBlocks(element);
     }
 
     function renderMarkdown(element, markdownText) {
@@ -825,6 +1314,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             element.innerHTML = formatMarkdownFallback(markdownText);
         }
+        enhanceCodeBlocks(element);
         if (window.Prism) {
             Prism.highlightAllUnder(element);
         }

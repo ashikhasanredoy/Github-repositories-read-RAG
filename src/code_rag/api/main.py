@@ -49,7 +49,7 @@ parser = CodeParser()
 chunker = CodeChunker(parser=parser)
 vector_store = VectorStore(ollama_service=ollama_service)
 bm25_store = BM25Store()
-retriever = HybridRetriever(vector_store=vector_store, bm25_store=bm25_store)
+retriever = HybridRetriever(vector_store=vector_store, bm25_store=bm25_store, cloner=cloner)
 rag_graph = CodeRAGGraph(retriever=retriever, ollama_service=ollama_service)
 rag_pipeline = rag_graph.build()
 
@@ -172,7 +172,7 @@ async def query_repository(req: QueryRequest):
         raise HTTPException(status_code=500, detail=str(err))
 
 @app.post("/api/query/stream", tags=["Query"])
-def query_repository_stream(req: QueryRequest):
+async def query_repository_stream(req: QueryRequest):
     if req.model_name:
         ollama_service.set_model(req.model_name)
 
@@ -191,15 +191,23 @@ def query_repository_stream(req: QueryRequest):
         "trace_steps": []
     }
 
-    def event_stream():
+    async def event_stream():
         try:
-            for item in rag_graph.stream_rag(initial_state):
+            async for item in rag_graph.stream_rag_async(initial_state):
                 yield f"data: {json.dumps(item)}\n\n"
         except Exception as err:
             logger.error("Streaming error: %s", err)
             yield f"data: {json.dumps({'type': 'error', 'error': str(err)})}\n\n"
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.get("/api/repos", response_model=RepoListResponse, tags=["Repositories"])
 async def list_repositories():

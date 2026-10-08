@@ -9,6 +9,10 @@ from src.code_rag.core.models import CodeChunk
 
 logger = logging.getLogger(__name__)
 
+CAMEL_REGEX = re.compile(r'([a-z0-9])([A-Z])')
+WORD_REGEX = re.compile(r'[a-zA-Z0-9]+')
+COMPOUND_REGEX = re.compile(r'[a-zA-Z0-9_]+')
+
 class BM25Store:
     def __init__(self, storage_dir: Optional[Path] = None):
         self.storage_dir = storage_dir or settings.BM25_DIR
@@ -16,11 +20,12 @@ class BM25Store:
 
     @staticmethod
     def tokenize(text: str) -> List[str]:
-        split_camel = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', text)
-        words = re.findall(r'[a-zA-Z0-9]+', split_camel.lower())
-        compounds = [token.lower() for token in re.findall(r'[a-zA-Z0-9_]+', text)]
-        combined = words + compounds
-        return [t for t in combined if len(t) > 1]
+        if not text:
+            return []
+        split_camel = CAMEL_REGEX.sub(r'\1 \2', text)
+        words = WORD_REGEX.findall(split_camel.lower())
+        compounds = [token.lower() for token in COMPOUND_REGEX.findall(text)]
+        return [t for t in (words + compounds) if len(t) > 1]
 
     def index(self, repo_id: str, chunks: List[CodeChunk]) -> bool:
         if not chunks:

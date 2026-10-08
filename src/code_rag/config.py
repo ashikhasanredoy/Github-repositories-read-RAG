@@ -10,10 +10,10 @@ class Settings(BaseSettings):
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     LLM_MODEL: str = "olmo:latest"
-    EMBEDDING_MODEL: str = "nomic-embed-text"
+    EMBEDDING_MODEL: str = "all-minilm:latest"
     TEMPERATURE: float = 0.1
-    MAX_TOKENS: int = 4096
-    NUM_CTX: int = 8192
+    MAX_TOKENS: int = 8192
+    NUM_CTX: int = 16384
 
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
     DATA_DIR: Path = BASE_DIR / "data"
@@ -21,8 +21,9 @@ class Settings(BaseSettings):
     CHROMA_DIR: Path = DATA_DIR / "chroma_db"
     BM25_DIR: Path = DATA_DIR / "bm25_indices"
 
-    MAX_FILE_SIZE_KB: int = 2000
-    MAX_CHUNK_CHARS: int = 3000
+    MAX_FILE_SIZE_KB: int = 5000
+    MAX_CHUNK_CHARS: int = 4000
+    EMBED_MAX_CHARS: int = 2000
     SUPPORTED_EXTENSIONS: Set[str] = {
         ".py", ".ipynb", ".js", ".ts", ".jsx", ".tsx",
         ".html", ".css", ".scss", ".sass", ".less",
@@ -40,16 +41,18 @@ class Settings(BaseSettings):
     IGNORE_DIRS: Set[str] = {
         ".git", ".github", "node_modules", "venv", ".venv", "env",
         "__pycache__", "dist", "build", ".next", ".cache",
-        "coverage", ".pytest_cache", ".idea", ".vscode", ".ipynb_checkpoints"
+        "coverage", ".pytest_cache", ".idea", ".vscode", ".ipynb_checkpoints",
+        "data", "chroma_db", "bm25_indices", "repos", ".mypy_cache", ".ruff_cache",
+        "vendor", "out", "target", ".turbo", ".nuxt", ".svelte-kit", "site-packages"
     }
     IGNORE_FILES: Set[str] = {
         "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
-        "poetry.lock", "Pipfile.lock", "Cargo.lock"
+        "poetry.lock", "Pipfile.lock", "Cargo.lock", "composer.lock", "bun.lockb"
     }
 
-    VECTOR_TOP_K: int = 15
-    BM25_TOP_K: int = 15
-    FINAL_TOP_K: int = 8
+    VECTOR_TOP_K: int = 10
+    BM25_TOP_K: int = 10
+    FINAL_TOP_K: int = 4
     RRF_K: int = 60
 
     model_config = SettingsConfigDict(

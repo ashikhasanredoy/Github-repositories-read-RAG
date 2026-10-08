@@ -41,7 +41,7 @@ class VectorStore:
         ids = [c.chunk_id for c in chunks]
         embeddings = self.ollama.embed_documents(texts)
 
-        batch_size = 64
+        batch_size = 256
         for i in range(0, len(chunks), batch_size):
             collection.upsert(
                 ids=ids[i:i + batch_size],
@@ -59,15 +59,39 @@ class VectorStore:
         except Exception:
             return []
 
-        query_vector = self.ollama.embed_query(query)
-        if not query_vector:
-            return []
+        try:
+            query_vector = self.ollama.embed_query(query)
+            if not query_vector:
+                return []
 
-        results = collection.query(
-            query_embeddings=[query_vector],
-            n_results=min(top_k, max(1, collection.count())),
-            include=["documents", "metadatas", "distances"]
-        )
+            try:
+                results = collection.query(
+                    query_embeddings=[query_vector],
+                    n_results=min(top_k, max(1, collection.count())),
+                    include=["documents", "metadatas", "distances"]
+                )
+            except Exception as dim_err:
+                installed = self.ollama.list_installed_models()
+                alt_models = [m for m in installed if any(k in m.lower() for k in ["embed", "minilm", "nomic", "bge"])]
+                recovered = False
+                for alt_m in alt_models:
+                    alt_vector = self.ollama.embed_query(query, model_override=alt_m)
+                    if alt_vector:
+                        try:
+                            results = collection.query(
+                                query_embeddings=[alt_vector],
+                                n_results=min(top_k, max(1, collection.count())),
+                                include=["documents", "metadatas", "distances"]
+                            )
+                            recovered = True
+                            break
+                        except Exception:
+                            continue
+                if not recovered:
+                    raise dim_err
+        except Exception as err:
+            logger.warning("Vector search skipped for '%s': %s", coll_name, err)
+            return []
 
         matched_docs: List[Dict[str, Any]] = []
         if results and results.get("ids") and results["ids"][0]:

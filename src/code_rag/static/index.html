@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="/static/styles.css?v=9.0">
+    <link rel="stylesheet" href="/static/styles.css?v=23.0">
 </head>
 <body>
     <div class="app-container">
@@ -166,6 +166,23 @@
             <!-- Quick Suggestions Bar -->
             <div class="quick-queries-bar">
                 <div class="quick-chips-scroll">
+                    <button class="q-chip" data-query="Explain this code line by line:
+
+```python
+def binary_search(arr, target):
+    left, right = 0, len(arr) - 1
+    while left <= right:
+        mid = (left + right) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return -1
+```">
+                        <span>🔍 Line-by-Line Explainer</span>
+                    </button>
                     <button class="q-chip" data-query="Explain the end-to-end architecture and project structure.">
                         <span>Project Architecture</span>
                     </button>
@@ -218,6 +235,15 @@
                 </div>
             </div>
 
+            <!-- Scroll to Bottom Button -->
+            <button type="button" id="scrollBottomBtn" class="scroll-bottom-btn" title="Scroll to latest">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <polyline points="19 12 12 19 5 12"></polyline>
+                </svg>
+                <span>Latest</span>
+            </button>
+
             <!-- Input Bar -->
             <div class="input-container">
                 <form id="queryForm" class="chat-input-form" novalidate onsubmit="return false;">
@@ -255,6 +281,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
-    <script src="/static/app.js?v=16.0"></script>
+    <script src="/static/app.js?v=23.0"></script>
 </body>
 </html>

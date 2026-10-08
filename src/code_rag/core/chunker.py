@@ -5,6 +5,27 @@ from src.code_rag.config import settings
 from src.code_rag.core.models import CodeChunk
 from src.code_rag.core.parser import CodeParser
 
+def generate_ascii_tree(relative_paths: List[str]) -> str:
+    tree: dict = {}
+    for path in sorted(relative_paths):
+        parts = Path(path).parts
+        curr = tree
+        for part in parts:
+            curr = curr.setdefault(part, {})
+
+    lines: List[str] = []
+    def _render(node: dict, prefix: str = ""):
+        keys = sorted(node.keys(), key=lambda k: (len(node[k]) > 0, k.lower()))
+        for idx, key in enumerate(keys):
+            is_last = (idx == len(keys) - 1)
+            connector = "└── " if is_last else "├── "
+            lines.append(f"{prefix}{connector}{key}")
+            child_prefix = prefix + ("    " if is_last else "│   ")
+            _render(node[key], child_prefix)
+
+    _render(tree)
+    return "\n".join(lines)
+
 class CodeChunker:
     LANGUAGE_MAP = {
         ".py": "python", ".ipynb": "python", ".js": "javascript", ".jsx": "javascript",
@@ -33,13 +54,37 @@ class CodeChunker:
         if not files:
             return []
 
-        # 1. Generate repository directory structure & file map overview
-        dir_tree_lines = ["# Repository File Tree & Directory Map\n"]
-        for f in sorted(files):
-            rel = str(f.relative_to(root))
-            dir_tree_lines.append(f"- {rel}")
+        rel_paths = [str(f.relative_to(root)) for f in sorted(files)]
+        ascii_tree = generate_ascii_tree(rel_paths)
 
-        dir_tree_content = "\n".join(dir_tree_lines)
+        # 1. Group directories and root files for comprehensive explanation
+        dirs_set = sorted({str(Path(p).parts[0]) for p in rel_paths if len(Path(p).parts) > 1})
+        root_files = sorted({p for p in rel_paths if len(Path(p).parts) == 1})
+
+        dir_breakdown = []
+        if dirs_set:
+            dir_breakdown.append("- The repository contains the following directories:")
+            for d in dirs_set:
+                sub_count = len([p for p in rel_paths if p.startswith(f"{d}/")])
+                dir_breakdown.append(f"  - `{d}/`: Contains {sub_count} files.")
+
+        if root_files:
+            dir_breakdown.append("- The repository also contains the following root files:")
+            for rf in root_files:
+                dir_breakdown.append(f"  - `{rf}`: Root configuration / entrypoint file.")
+
+        breakdown_str = "\n".join(dir_breakdown)
+
+        structure_content = (
+            f"**Repository File Structure:**\n"
+            f"```markdown\n"
+            f"{ascii_tree}\n"
+            f"```\n"
+            f"Note: The above structure is a direct representation of the repository structure as provided in the repository context.\n\n"
+            f"The repository structure is as follows:\n\n"
+            f"{breakdown_str}"
+        )
+
         chunks.append(CodeChunk(
             chunk_id=f"{repo_id}_file_tree",
             repo_id=repo_id,
@@ -49,15 +94,15 @@ class CodeChunker:
             symbol_type="overview",
             start_line=1,
             end_line=len(files),
-            code_content=dir_tree_content[:self.max_chunk_chars],
+            code_content=structure_content,
             formatted_content=(
                 f"File: REPOSITORY_STRUCTURE.md\n"
                 f"Directory: /\n"
                 f"Language: markdown\n"
                 f"Symbol: repository_file_tree (overview)\n\n"
-                f"{dir_tree_content[:self.max_chunk_chars]}"
+                f"{structure_content}"
             ),
-            docstring="Complete list of all files and folders in this repository."
+            docstring="Complete exact list and ASCII tree of all files and folders in this repository."
         ))
 
         # 2. Chunk every file in root and all subdirectories

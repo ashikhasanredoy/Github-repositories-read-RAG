@@ -30,12 +30,10 @@ class CodeParser:
         valid_files: List[Path] = []
 
         for parent, dirs, files in os.walk(root):
-            # Exclude dot folders (e.g. .git) and ignored build/cache folders
             dirs[:] = [
                 d for d in dirs
-                if d not in self.ignore_dirs
+                if d.lower() not in self.ignore_dirs
                 and not (d.startswith('.') and d not in {'.'})
-                and not (root == settings.BASE_DIR and d == "data")
             ]
 
             for filename in files:
@@ -152,7 +150,7 @@ class CodeParser:
                         symbol_type="function",
                         start_line=start,
                         end_line=end,
-                        content="".join(lines[start - 1:min(end, start + 80)]),
+                        content="".join(lines[start - 1:end]),
                         docstring=ast.get_docstring(node)
                     ))
                 elif isinstance(node, ast.ClassDef):
@@ -162,8 +160,8 @@ class CodeParser:
                         name=node.name,
                         symbol_type="class",
                         start_line=start,
-                        end_line=min(end, start + 40),
-                        content="".join(lines[start - 1:min(end, start + 40)]),
+                        end_line=end,
+                        content="".join(lines[start - 1:end]),
                         docstring=ast.get_docstring(node)
                     ))
                     for sub in node.body:
@@ -175,17 +173,28 @@ class CodeParser:
                                 symbol_type="method",
                                 start_line=sub_start,
                                 end_line=sub_end,
-                                content="".join(lines[sub_start - 1:min(sub_end, sub_start + 60)]),
+                                content="".join(lines[sub_start - 1:sub_end]),
                                 docstring=ast.get_docstring(sub),
                                 parent_name=node.name
                             ))
         except Exception:
             pass
 
-        # Combine specific AST symbols with full-file sliding window coverage
-        window_chunks = self._sliding_window(lines, window_size=60, overlap=12)
-        symbols.extend(window_chunks)
-        return symbols
+        # If AST symbols found, also add module top-level overview if not already captured
+        if symbols:
+            # Add top of file (imports / global config) if first symbol starts after line 15
+            if symbols[0].start_line > 15:
+                symbols.insert(0, CodeSymbol(
+                    name=f"{filename}_header",
+                    symbol_type="module_header",
+                    start_line=1,
+                    end_line=symbols[0].start_line - 1,
+                    content="".join(lines[:symbols[0].start_line - 1])
+                ))
+            return symbols
+
+        # Fallback to sliding window only if no structural AST symbols found
+        return self._sliding_window(lines, window_size=150, overlap=20)
 
     def _parse_js_ts(self, lines: List[str], filename: str) -> List[CodeSymbol]:
         symbols: List[CodeSymbol] = []
@@ -198,7 +207,7 @@ class CodeParser:
                 name = match.group(1) or match.group(2)
                 if name:
                     start = i + 1
-                    end = min(start + 60, len(lines))
+                    end = min(start + 150, len(lines))
                     symbols.append(CodeSymbol(
                         name=name,
                         symbol_type="function" if "function" in line or "=>" in line or "(" in line else "class",
@@ -207,11 +216,12 @@ class CodeParser:
                         content="".join(lines[start - 1:end])
                     ))
 
-        window_chunks = self._sliding_window(lines, window_size=60, overlap=12)
-        symbols.extend(window_chunks)
-        return symbols
+        if symbols:
+            return symbols
 
-    def _sliding_window(self, lines: List[str], window_size: int = 60, overlap: int = 12) -> List[CodeSymbol]:
+        return self._sliding_window(lines, window_size=150, overlap=20)
+
+    def _sliding_window(self, lines: List[str], window_size: int = 150, overlap: int = 20) -> List[CodeSymbol]:
         total = len(lines)
         if total <= window_size:
             return [CodeSymbol(

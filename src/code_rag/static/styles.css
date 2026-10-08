@@ -972,6 +972,119 @@ html, body {
     margin-left: auto;
     box-shadow: var(--shadow-sm);
     line-height: 1.5;
+    position: relative;
+}
+
+/* User Message Action Buttons (Edit, Delete, Copy) */
+.user-msg-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    align-self: flex-end;
+}
+
+.msg-row.user:hover .user-msg-actions,
+.msg-row.user:focus-within .user-msg-actions {
+    opacity: 1;
+}
+
+.btn-user-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.725rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-user-action:hover {
+    color: var(--text-primary);
+    border-color: var(--primary-color);
+    background: var(--card-hover);
+    transform: translateY(-1px);
+}
+
+.btn-user-action.btn-delete-user-msg:hover {
+    color: var(--accent-rose);
+    border-color: rgba(244, 63, 94, 0.4);
+    background: rgba(244, 63, 94, 0.1);
+}
+
+/* User Inline Edit Container */
+.user-edit-container {
+    width: 100%;
+    max-width: 78%;
+    margin-left: auto;
+    background: var(--card-bg);
+    border: 1px solid var(--primary-color);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    box-shadow: 0 0 0 3px var(--primary-glow), var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: fadeIn 0.2s ease;
+}
+
+.user-edit-textarea {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+    min-height: 48px;
+    line-height: 1.5;
+}
+
+.user-edit-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.btn-edit-save {
+    padding: 5px 12px;
+    background: var(--primary-color);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.775rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.2s ease;
+}
+
+.btn-edit-save:hover {
+    filter: brightness(1.1);
+}
+
+.btn-edit-cancel {
+    padding: 5px 12px;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    font-size: 0.775rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-edit-cancel:hover {
+    color: var(--text-primary);
+    border-color: var(--card-border);
 }
 
 /* Bot Message: Clean card positioned slightly to the left */
@@ -1013,15 +1126,100 @@ html, body {
     border: 1px solid var(--card-border);
 }
 
-.msg-row.bot .msg-bubble pre {
-    margin: 12px 0 !important;
+/* ChatGPT-Style Code Block & Header */
+.code-block-wrapper {
+    position: relative;
+    margin: 14px 0 !important;
     border-radius: var(--radius-md) !important;
-    background: var(--code-bg) !important;
+    background: #141824 !important;
     border: 1px solid var(--code-border) !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.code-block-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    background: #0d111a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    user-select: none;
+}
+
+[data-theme="light"] .code-block-wrapper {
+    background: #1e293b !important;
+    border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .code-block-header {
+    background: #0f172a;
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.code-lang-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.775rem;
+    font-weight: 500;
+    color: #94a3b8;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+}
+
+.code-block-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-code-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.775rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+}
+
+.btn-code-action:hover {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.btn-code-action:active {
+    transform: scale(0.96);
+}
+
+.btn-code-action.success,
+.btn-code-action.copied {
+    color: var(--accent-emerald) !important;
+}
+
+.code-block-wrapper pre,
+.msg-row.bot .msg-bubble pre {
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
     padding: 14px 16px !important;
     font-family: 'JetBrains Mono', monospace !important;
-    font-size: 0.825rem !important;
+    font-size: 0.835rem !important;
+    line-height: 1.6 !important;
     overflow-x: auto !important;
+}
+
+.code-block-wrapper pre code {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    color: #f1f5f9;
 }
 
 /* AI Answer Actions Bar & Copy Button */
@@ -1328,6 +1526,50 @@ html, body {
 
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+/* Scroll to Bottom Floating Button */
+.scroll-bottom-btn {
+    position: absolute;
+    bottom: 85px;
+    right: 28px;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--sidebar-border);
+    color: var(--text-primary);
+    padding: 7px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    pointer-events: none;
+}
+
+.scroll-bottom-btn.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.scroll-bottom-btn:hover {
+    background: var(--primary-color);
+    color: #ffffff;
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-glow);
+}
+
+.scroll-bottom-btn:active {
+    transform: scale(0.96);
 }
 
 @keyframes fadeIn {

@@ -1,6 +1,6 @@
-from typing import TypedDict, List, Dict, Any
+from typing import TypedDict, List, Dict, Any, Optional
 
-class CodeRAGState(TypedDict):
+class CodeRAGState(TypedDict, total=False):
     question: str
     original_question: str
     repo_id: str
@@ -13,3 +13,4 @@ class CodeRAGState(TypedDict):
     answer: str
     sources: List[Dict[str, Any]]
     trace_steps: List[str]
+    user_code_snippet: Optional[Dict[str, Any]]
