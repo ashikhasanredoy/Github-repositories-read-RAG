@@ -44,6 +44,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let isSubmitting = false;
     let currentAbortController = null;
     let currentBotRow = null;
+    let currentActiveBotEntry = null;
+    let saveMemoryTimeout = null;
     let currentAccumulatedAnswer = "";
     let queryQueue = [];
     let conversations = [];
@@ -93,6 +95,32 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (Array.isArray(parsed)) {
                     conversations = parsed;
                 }
+            }
+
+            // Heal any missing bot messages so that every user question has its answer paired
+            if (Array.isArray(conversations)) {
+                conversations.forEach(c => {
+                    if (Array.isArray(c.messages) && c.messages.length > 0) {
+                        const healed = [];
+                        for (let i = 0; i < c.messages.length; i++) {
+                            const m = c.messages[i];
+                            healed.push(m);
+                            if (m.type === "user") {
+                                const next = c.messages[i + 1];
+                                if (!next || next.type !== "bot") {
+                                    healed.push({
+                                        type: "bot",
+                                        text: "*(Response was interrupted)*",
+                                        sources: [],
+                                        traceSteps: [],
+                                        elapsedTime: null
+                                    });
+                                }
+                            }
+                        }
+                        c.messages = healed;
+                    }
+                });
             }
 
             // Migration from legacy single-chat history if exists
@@ -261,7 +289,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let currentModel = "llama3.2:latest";
 
-    function recordUserMessageInConversation(text) {
+    function recordUserAndBotMessageInConversation(text) {
         if (!activeConvId) {
             activeConvId = "conv_" + Date.now();
         }
@@ -287,24 +315,47 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        conv.messages.push({ type: "user", text: text });
+        const userMsg = { type: "user", text: text };
+        const botMsg = { type: "bot", text: "", sources: [], traceSteps: [], elapsedTime: null };
+
+        conv.messages.push(userMsg);
+        conv.messages.push(botMsg);
         chatHistory = conv.messages;
+
         saveConversationsToMemory();
         renderConversationsList();
-        return conv.messages.length - 1;
+
+        return {
+            userIndex: conv.messages.length - 2,
+            botIndex: conv.messages.length - 1,
+            botEntry: botMsg
+        };
+    }
+
+    function recordUserMessageInConversation(text) {
+        const pair = recordUserAndBotMessageInConversation(text);
+        return pair.userIndex;
     }
 
     function recordBotMessageInConversation(text, sources, traceSteps, elapsedTime = null) {
         let conv = conversations.find(c => c.id === activeConvId);
         if (conv) {
             conv.timestamp = Date.now();
-            conv.messages.push({
-                type: "bot",
-                text: text,
-                sources: sources || [],
-                traceSteps: traceSteps || [],
-                elapsedTime: elapsedTime || null
-            });
+            const lastMsg = conv.messages[conv.messages.length - 1];
+            if (lastMsg && lastMsg.type === "bot") {
+                lastMsg.text = text;
+                lastMsg.sources = sources || [];
+                lastMsg.traceSteps = traceSteps || [];
+                lastMsg.elapsedTime = elapsedTime || null;
+            } else {
+                conv.messages.push({
+                    type: "bot",
+                    text: text,
+                    sources: sources || [],
+                    traceSteps: traceSteps || [],
+                    elapsedTime: elapsedTime || null
+                });
+            }
             chatHistory = conv.messages;
             saveConversationsToMemory();
             renderConversationsList();
@@ -836,6 +887,14 @@ document.addEventListener("DOMContentLoaded", () => {
             currentAbortController = null;
         }
 
+        if (currentActiveBotEntry) {
+            if (!currentActiveBotEntry.text || !currentActiveBotEntry.text.trim()) {
+                currentActiveBotEntry.text = "*(Generation stopped)*";
+            }
+            saveConversationsToMemory();
+            currentActiveBotEntry = null;
+        }
+
         if (currentBotRow) {
             const loadingBox = currentBotRow.querySelector(".loading-box");
             if (loadingBox) loadingBox.remove();
@@ -884,15 +943,40 @@ document.addEventListener("DOMContentLoaded", () => {
         autoScrollEnabled = true;
 
         let userMsgIndex;
+        let activeBotEntry = null;
+
         if (existingRowEl) {
             // Unmark queued state
             existingRowEl.classList.remove("msg-queued");
             const qHeader = existingRowEl.querySelector(".msg-queued-header");
             if (qHeader) qHeader.remove();
             userMsgIndex = existingMsgIndex !== null ? existingMsgIndex : parseInt(existingRowEl.dataset.msgIndex || "0", 10);
+
+            let conv = conversations.find(c => c.id === activeConvId);
+            if (conv && conv.messages) {
+                if (userMsgIndex + 1 < conv.messages.length && conv.messages[userMsgIndex + 1].type === "bot") {
+                    activeBotEntry = conv.messages[userMsgIndex + 1];
+                    activeBotEntry.text = "";
+                    activeBotEntry.sources = [];
+                    activeBotEntry.traceSteps = [];
+                    activeBotEntry.elapsedTime = null;
+                } else {
+                    activeBotEntry = {
+                        type: "bot",
+                        text: "",
+                        sources: [],
+                        traceSteps: [],
+                        elapsedTime: null
+                    };
+                    conv.messages.splice(userMsgIndex + 1, 0, activeBotEntry);
+                }
+                saveConversationsToMemory();
+            }
         } else {
-            // Persist User Message to conversation memory and append to UI
-            userMsgIndex = recordUserMessageInConversation(q);
+            // Persist User Message and create paired Bot Message placeholder
+            const pair = recordUserAndBotMessageInConversation(q);
+            userMsgIndex = pair.userIndex;
+            activeBotEntry = pair.botEntry;
             appendMsg("user", q, userMsgIndex);
             if (queryInput) {
                 queryInput.value = "";
@@ -900,6 +984,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
+        currentActiveBotEntry = activeBotEntry;
         const startTime = performance.now();
 
         // Append Loading Bot Message
@@ -921,6 +1006,19 @@ document.addEventListener("DOMContentLoaded", () => {
         let sources = [];
         let traceSteps = [];
         let finalElapsedSec = null;
+
+        const scheduleSaveMemory = () => {
+            if (saveMemoryTimeout) return;
+            saveMemoryTimeout = setTimeout(() => {
+                saveMemoryTimeout = null;
+                if (activeBotEntry) {
+                    activeBotEntry.text = currentAccumulatedAnswer;
+                    activeBotEntry.sources = sources;
+                    activeBotEntry.traceSteps = traceSteps;
+                }
+                saveConversationsToMemory();
+            }, 300);
+        };
 
         try {
             const res = await fetch("/api/query/stream", {
@@ -981,6 +1079,9 @@ document.addEventListener("DOMContentLoaded", () => {
                                 const statusMsg = contentEl.querySelector(".stream-status");
                                 if (statusMsg) statusMsg.textContent = data.step;
                                 traceSteps.push(data.step);
+                                if (activeBotEntry) {
+                                    activeBotEntry.traceSteps = traceSteps;
+                                }
                             } else if (data.type === "token") {
                                 if (!textDiv) {
                                     contentEl.innerHTML = "";
@@ -989,10 +1090,18 @@ document.addEventListener("DOMContentLoaded", () => {
                                     contentEl.appendChild(textDiv);
                                 }
                                 currentAccumulatedAnswer += data.content;
+                                if (activeBotEntry) {
+                                    activeBotEntry.text = currentAccumulatedAnswer;
+                                }
+                                scheduleSaveMemory();
                                 scheduleRender();
                             } else if (data.type === "done") {
                                 sources = data.sources || [];
                                 if (data.trace_steps) traceSteps = data.trace_steps;
+                                if (activeBotEntry) {
+                                    activeBotEntry.sources = sources;
+                                    activeBotEntry.traceSteps = traceSteps;
+                                }
                             } else if (data.type === "error") {
                                 throw new Error(data.error);
                             }
@@ -1018,16 +1127,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
             renderExtras(contentEl, sources, traceSteps, currentAccumulatedAnswer, finalElapsedSec);
 
-            // Persist bot message to active conversation with generation time
-            if (currentAccumulatedAnswer) {
-                recordBotMessageInConversation(currentAccumulatedAnswer, sources, traceSteps, finalElapsedSec);
+            if (saveMemoryTimeout) {
+                clearTimeout(saveMemoryTimeout);
+                saveMemoryTimeout = null;
             }
 
+            // Persist final bot message to active conversation with generation time
+            if (activeBotEntry) {
+                activeBotEntry.text = currentAccumulatedAnswer;
+                activeBotEntry.sources = sources;
+                activeBotEntry.traceSteps = traceSteps;
+                activeBotEntry.elapsedTime = finalElapsedSec;
+            }
+            saveConversationsToMemory();
+
         } catch (err) {
+            if (saveMemoryTimeout) {
+                clearTimeout(saveMemoryTimeout);
+                saveMemoryTimeout = null;
+            }
+
             if (err.name === "AbortError" || controller.signal.aborted) {
                 console.info("Previous query stream terminated by user");
+                if (activeBotEntry) {
+                    if (currentAccumulatedAnswer && currentAccumulatedAnswer.trim()) {
+                        activeBotEntry.text = currentAccumulatedAnswer;
+                    } else {
+                        activeBotEntry.text = "*(Generation stopped)*";
+                    }
+                    saveConversationsToMemory();
+                }
                 return;
             }
+
+            if (activeBotEntry) {
+                activeBotEntry.text = `*(Error: ${err.message})*`;
+                saveConversationsToMemory();
+            }
+
             contentEl.innerHTML = `
                 <div style="color: var(--accent-rose); display: flex; align-items: center; gap: 8px;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -1040,6 +1177,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 currentAbortController = null;
                 isSubmitting = false;
                 currentBotRow = null;
+                currentActiveBotEntry = null;
             }
             if (autoScrollEnabled && chatContainer) {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -1047,6 +1185,14 @@ document.addEventListener("DOMContentLoaded", () => {
             updateScrollState();
         }
     }
+
+    // Persist streaming answer synchronously before tab refresh/close
+    window.addEventListener("beforeunload", () => {
+        if (currentActiveBotEntry && currentAccumulatedAnswer) {
+            currentActiveBotEntry.text = currentAccumulatedAnswer;
+            saveConversationsToMemory();
+        }
+    });
 
     // =========================================================================
     // Rendering & Helpers
