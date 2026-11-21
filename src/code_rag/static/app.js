@@ -42,6 +42,9 @@ document.addEventListener("DOMContentLoaded", () => {
         : ".";
 
     let isSubmitting = false;
+    let currentAbortController = null;
+    let currentBotRow = null;
+    let currentAccumulatedAnswer = "";
     let queryQueue = [];
     let conversations = [];
     let activeConvId = null;
@@ -827,70 +830,24 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function submitUserQuery(customQuestion = null, existingRowEl = null, existingMsgIndex = null) {
-        // If system is already generating/streaming an answer, add subsequent question to queue
-        if (isSubmitting) {
-            const q = customQuestion !== null ? customQuestion : (queryInput ? queryInput.value.trim() : "");
-            if (!q) {
-                if (queryInput) queryInput.focus();
-                return;
-            }
-
-            let repo = repoSelect ? repoSelect.value : "";
-            if (!repo && repoSelect && repoSelect.options && repoSelect.options.length > 0) {
-                for (let i = 0; i < repoSelect.options.length; i++) {
-                    if (repoSelect.options[i].value) {
-                        repoSelect.selectedIndex = i;
-                        repo = repoSelect.options[i].value;
-                        updateSelectedRepoUI();
-                        break;
-                    }
-                }
-            }
-
-            if (!repo) {
-                showToast("Please index or select a target repository first from the sidebar.", "warning", 3500);
-                if (repoSourceInput) repoSourceInput.focus();
-                return;
-            }
-
-            // Hide welcome hero when conversation begins
-            if (welcomeHero && welcomeHero.parentNode === chatContainer) {
-                welcomeHero.remove();
-            }
-
-            autoScrollEnabled = true;
-
-            // Persist User Message to conversation memory and render with queued styling
-            const userMsgIndex = recordUserMessageInConversation(q);
-            const queuedRow = appendMsg("user", q, userMsgIndex);
-            queuedRow.classList.add("msg-queued");
-
-            const bubble = queuedRow.querySelector(".msg-bubble");
-            if (bubble) {
-                const queueHeader = document.createElement("div");
-                queueHeader.className = "msg-queued-header";
-                queueHeader.innerHTML = `<span class="queued-status-pill">⏳ In Queue (#${queryQueue.length + 1})</span>`;
-                bubble.insertBefore(queueHeader, bubble.firstChild);
-            }
-
-            if (queryInput) {
-                queryInput.value = "";
-                queryInput.style.height = "auto";
-            }
-
-            queryQueue.push({
-                id: Date.now(),
-                question: q,
-                rowEl: queuedRow,
-                userMsgIndex: userMsgIndex
-            });
-
-            showToast(`Question added to queue (Position #${queryQueue.length})`, "info", 2000);
-            if (chatContainer && autoScrollEnabled) {
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-            }
-            return;
+        // Terminate previous running question immediately — do not add to queue
+        if (currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
         }
+
+        if (currentBotRow) {
+            const loadingBox = currentBotRow.querySelector(".loading-box");
+            if (loadingBox) loadingBox.remove();
+            const bubble = currentBotRow.querySelector(".msg-bubble");
+            if (bubble && !bubble.textContent.trim()) {
+                bubble.innerHTML = `<span style="color: var(--text-muted); font-style: italic;">(Generation stopped)</span>`;
+            }
+            currentBotRow = null;
+        }
+
+        isSubmitting = false;
+        queryQueue = [];
 
         const q = customQuestion !== null ? customQuestion : (queryInput ? queryInput.value.trim() : "");
         if (!q) {
@@ -955,8 +912,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const contentEl = botMsg.querySelector(".msg-bubble");
 
         isSubmitting = true;
+        currentBotRow = botMsg;
+        currentAccumulatedAnswer = "";
 
-        let accumulatedAnswer = "";
+        const controller = new AbortController();
+        currentAbortController = controller;
+
         let sources = [];
         let traceSteps = [];
         let finalElapsedSec = null;
@@ -965,6 +926,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch("/api/query/stream", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                signal: controller.signal,
                 body: JSON.stringify({
                     repo_id: repo,
                     question: q,
@@ -990,7 +952,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     renderPending = true;
                     requestAnimationFrame(() => {
                         if (textDiv) {
-                            renderFastMarkdown(textDiv, accumulatedAnswer);
+                            renderFastMarkdown(textDiv, currentAccumulatedAnswer);
                             // Only auto-scroll if user has not scrolled up to read previous context
                             if (autoScrollEnabled && chatContainer) {
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -1026,7 +988,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                     textDiv.className = "markdown-body";
                                     contentEl.appendChild(textDiv);
                                 }
-                                accumulatedAnswer += data.content;
+                                currentAccumulatedAnswer += data.content;
                                 scheduleRender();
                             } else if (data.type === "done") {
                                 sources = data.sources || [];
@@ -1043,7 +1005,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             finalElapsedSec = ((performance.now() - startTime) / 1000).toFixed(1);
 
-            if (!textDiv && accumulatedAnswer) {
+            if (!textDiv && currentAccumulatedAnswer) {
                 contentEl.innerHTML = "";
                 textDiv = document.createElement("div");
                 textDiv.className = "markdown-body";
@@ -1051,17 +1013,21 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             if (textDiv) {
-                renderMarkdown(textDiv, accumulatedAnswer);
+                renderMarkdown(textDiv, currentAccumulatedAnswer);
             }
 
-            renderExtras(contentEl, sources, traceSteps, accumulatedAnswer, finalElapsedSec);
+            renderExtras(contentEl, sources, traceSteps, currentAccumulatedAnswer, finalElapsedSec);
 
             // Persist bot message to active conversation with generation time
-            if (accumulatedAnswer) {
-                recordBotMessageInConversation(accumulatedAnswer, sources, traceSteps, finalElapsedSec);
+            if (currentAccumulatedAnswer) {
+                recordBotMessageInConversation(currentAccumulatedAnswer, sources, traceSteps, finalElapsedSec);
             }
 
         } catch (err) {
+            if (err.name === "AbortError" || controller.signal.aborted) {
+                console.info("Previous query stream terminated by user");
+                return;
+            }
             contentEl.innerHTML = `
                 <div style="color: var(--accent-rose); display: flex; align-items: center; gap: 8px;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -1070,26 +1036,15 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
             showToast(err.message, "error");
         } finally {
-            isSubmitting = false;
+            if (currentAbortController === controller) {
+                currentAbortController = null;
+                isSubmitting = false;
+                currentBotRow = null;
+            }
             if (autoScrollEnabled && chatContainer) {
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }
             updateScrollState();
-
-            // Process next queued query automatically
-            if (queryQueue.length > 0) {
-                const nextItem = queryQueue.shift();
-
-                // Update remaining queue pills
-                queryQueue.forEach((item, idx) => {
-                    const pill = item.rowEl.querySelector(".queued-status-pill");
-                    if (pill) pill.textContent = `⏳ In Queue (#${idx + 1})`;
-                });
-
-                setTimeout(() => {
-                    submitUserQuery(nextItem.question, nextItem.rowEl, nextItem.userMsgIndex);
-                }, 300);
-            }
         }
     }
 
@@ -1181,29 +1136,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function deleteQuestionAt(index, rowEl = null) {
-        if (rowEl && rowEl.classList.contains("msg-queued")) {
-            const qIdx = queryQueue.findIndex(item => item.rowEl === rowEl || item.userMsgIndex === index);
-            if (qIdx !== -1) {
-                queryQueue.splice(qIdx, 1);
-            }
-            rowEl.remove();
-            let conv = conversations.find(c => c.id === activeConvId);
-            if (conv && conv.messages && index !== null && index !== undefined && index < conv.messages.length) {
-                conv.messages.splice(index, 1);
-                chatHistory = conv.messages;
-                saveConversationsToMemory();
-            }
-            queryQueue.forEach((item, idx) => {
-                const pill = item.rowEl.querySelector(".queued-status-pill");
-                if (pill) pill.textContent = `⏳ In Queue (#${idx + 1})`;
-            });
-            showToast("Queued question removed", "info", 2000);
-            return;
-        }
-
-        if (isSubmitting) {
-            showToast("Please wait for the current query to finish", "warning");
-            return;
+        if (isSubmitting && currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+            isSubmitting = false;
         }
 
         let conv = conversations.find(c => c.id === activeConvId);
@@ -1233,9 +1169,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function startInlineEdit(row, originalText, index) {
-        if (isSubmitting) {
-            showToast("Please wait for current response to finish before editing", "warning");
-            return;
+        if (isSubmitting && currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+            isSubmitting = false;
         }
 
         const bubble = row.querySelector(".msg-bubble");

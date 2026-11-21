@@ -195,6 +195,9 @@ async def query_repository_stream(req: QueryRequest):
         try:
             async for item in rag_graph.stream_rag_async(initial_state):
                 yield f"data: {json.dumps(item)}\n\n"
+        except (asyncio.CancelledError, GeneratorExit):
+            logger.info("Stream cancelled/aborted by client.")
+            return
         except Exception as err:
             logger.error("Streaming error: %s", err)
             yield f"data: {json.dumps({'type': 'error', 'error': str(err)})}\n\n"
