@@ -783,27 +783,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const source = repoSourceInput.value.trim();
         if (!source) return;
 
-        // --- Progress animation ---
-        const steps = [
-            { icon: "🔗", text: "Connecting to repository…" },
-            { icon: "📥", text: "Cloning repository…" },
-            { icon: "🔍", text: "Parsing source files…" },
-            { icon: "🧠", text: "Building vector index…" },
-            { icon: "⚡", text: "Finalizing embeddings…" }
-        ];
-        let stepIdx = 0;
-        ingestAlert.className = "alert-box info indexing-progress";
-        ingestAlert.innerHTML = `<span class="progress-step-icon">${steps[0].icon}</span><span class="progress-step-text">${steps[0].text}</span>`;
-        ingestAlert.style.display = "block";
-
-        const progressInterval = setInterval(() => {
-            stepIdx = (stepIdx + 1) % steps.length;
-            ingestAlert.innerHTML = `<span class="progress-step-icon">${steps[stepIdx].icon}</span><span class="progress-step-text">${steps[stepIdx].text}</span>`;
-        }, 2200);
-
-        ingestBtnText.textContent = "Indexing…";
+        ingestBtnText.textContent = "Indexing Code...";
         ingestSpinner.style.display = "inline-block";
         ingestBtn.disabled = true;
+        ingestAlert.style.display = "none";
 
         try {
             const res = await fetch("/api/index", {
@@ -815,38 +798,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 })
             });
             const data = await res.json();
-            clearInterval(progressInterval);
-
             if (res.ok) {
-                // Show success in-place with stats
                 ingestAlert.className = "alert-box success";
-                ingestAlert.innerHTML = `
-                    <strong>✅ Indexed successfully!</strong><br>
-                    <span style="font-size:0.82rem;opacity:0.9;">
-                        📁 ${data.total_files} files &nbsp;·&nbsp; 🧩 ${data.total_chunks} chunks &nbsp;·&nbsp; 📦 ${data.repo_name}
-                    </span>`;
+                ingestAlert.textContent = `Successfully indexed ${data.total_chunks} chunks from ${data.total_files} files.`;
                 ingestAlert.style.display = "block";
-
-                // Save and update dropdown
+                repoSourceInput.value = "";
                 localStorage.setItem("coderag_selected_repo", data.repo_id);
-                showToast(`✅ ${data.repo_name} indexed — ${data.total_chunks} chunks`, "success", 5000);
-
-                // Clear input after a short delay so user sees what was indexed
-                setTimeout(() => { repoSourceInput.value = ""; }, 1200);
-
+                showToast(`Repository ${data.repo_name} indexed (${data.total_chunks} chunks)`, "success");
                 await loadRepos();
-
-                // Auto-hide alert after 6 s
-                setTimeout(() => {
-                    ingestAlert.style.display = "none";
-                }, 6000);
             } else {
                 throw new Error(data.detail || "Indexing failed");
             }
         } catch (err) {
-            clearInterval(progressInterval);
             ingestAlert.className = "alert-box error";
-            ingestAlert.innerHTML = `<strong>❌ Error:</strong> ${escapeHtml(err.message)}`;
+            ingestAlert.textContent = err.message;
             ingestAlert.style.display = "block";
             showToast(err.message, "error");
         } finally {
@@ -1396,11 +1361,110 @@ document.addEventListener("DOMContentLoaded", () => {
         return "javascript";
     }
 
-    // Configure marked options
+    // Configure marked highlight parser for instant streaming highlights
     if (window.marked && typeof marked.setOptions === "function") {
-        try {
-            marked.setOptions({ breaks: true, gfm: true });
-        } catch(e) {}
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            highlight: function(code, lang) {
+                if (window.Prism) {
+                    let grammarLang = (lang || "").toLowerCase().trim();
+                    if (!grammarLang || grammarLang === "code" || grammarLang === "text") {
+                        grammarLang = detectCodeLanguage(code);
+                    }
+                    if (grammarLang === "html" || grammarLang === "xml") grammarLang = "markup";
+                    if (grammarLang === "py") grammarLang = "python";
+                    if (grammarLang === "js") grammarLang = "javascript";
+                    if (grammarLang === "ts") grammarLang = "typescript";
+                    if (grammarLang === "sh") grammarLang = "bash";
+
+                    if (Prism.languages[grammarLang]) {
+                        try {
+                            return Prism.highlight(code, Prism.languages[grammarLang], grammarLang);
+                        } catch (e) {
+                            return code;
+                        }
+                    }
+                }
+                return code;
+            }
+        });
+    }
+
+    function enhanceCodeBlocks(container) {
+        if (!container) return;
+        const pres = container.querySelectorAll("pre");
+        pres.forEach((pre) => {
+            if (pre.parentElement && pre.parentElement.classList.contains("code-block-wrapper")) {
+                return;
+            }
+
+            const codeEl = pre.querySelector("code");
+            let lang = "code";
+            if (codeEl) {
+                const match = codeEl.className.match(/language-([a-zA-Z0-9_-]+)/);
+                if (match && match[1] && match[1] !== "none" && match[1] !== "text" && match[1] !== "code") {
+                    lang = match[1].toLowerCase();
+                } else {
+                    const text = codeEl.textContent || "";
+                    lang = detectCodeLanguage(text);
+                }
+
+                if (lang === "html" || lang === "xml" || lang === "svg") {
+                    lang = "markup";
+                } else if (lang === "py") {
+                    lang = "python";
+                } else if (lang === "js") {
+                    lang = "javascript";
+                } else if (lang === "ts") {
+                    lang = "typescript";
+                } else if (lang === "sh") {
+                    lang = "bash";
+                }
+
+                codeEl.className = `language-${lang}`;
+                pre.className = `language-${lang}`;
+
+                if (window.Prism) {
+                    try {
+                        Prism.highlightElement(codeEl);
+                    } catch (e) {
+                        console.debug("Prism highlightElement error:", e);
+                    }
+                }
+            }
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "code-block-wrapper";
+
+            const displayLang = lang === "markup" ? "html" : lang;
+            const header = document.createElement("div");
+            header.className = "code-block-header";
+            header.innerHTML = `
+                <span class="code-lang-label">${escapeHtml(displayLang)}</span>
+                <div class="code-block-actions">
+                    <button type="button" class="btn-code-action btn-copy-code" title="Copy code">
+                        <svg class="action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span class="action-text">Copy</span>
+                    </button>
+                    <button type="button" class="btn-code-action btn-download-code" title="Download file">
+                        <svg class="action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        <span class="action-text">Download</span>
+                    </button>
+                </div>
+            `;
+
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.appendChild(header);
+            wrapper.appendChild(pre);
+        });
     }
 
     // Delegated click handler for code block Copy and Download buttons

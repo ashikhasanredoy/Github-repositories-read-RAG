@@ -776,34 +776,6 @@ html, body {
     color: var(--accent-rose);
 }
 
-.alert-box.info {
-    background: rgba(99, 102, 241, 0.08);
-    border: 1px solid rgba(99, 102, 241, 0.25);
-    color: var(--text-secondary);
-}
-
-.alert-box.indexing-progress {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.78rem;
-}
-
-.progress-step-icon {
-    font-size: 1rem;
-    flex-shrink: 0;
-    animation: progressPulse 1.1s ease-in-out infinite;
-}
-
-.progress-step-text {
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes progressPulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.6; transform: scale(0.9); }
-}
-
 /* ==========================================================================
    Main Chat View (Centered ChatGPT Layout)
    ========================================================================== */
