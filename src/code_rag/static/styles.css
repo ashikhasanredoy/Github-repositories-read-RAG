@@ -1295,52 +1295,70 @@ html, body {
     margin-bottom: 6px;
 }
 
-.msg-row.bot .msg-bubble code:not([class*="language-"]) {
-    background: var(--bg-surface-elevated);
-    color: var(--accent-cyan);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85em;
-    border: 1px solid var(--card-border);
+/* Inline code (only when NOT inside a pre block) */
+.msg-row.bot .msg-bubble :not(pre) > code,
+:not(pre) > code {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #e2e8f0 !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    font-family: 'JetBrains Mono', Consolas, monospace !important;
+    font-size: 0.85em !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 
-/* ChatGPT-Style Code Block & Header */
+/* Ensure code blocks and anything inside pre NEVER has inline code box styles */
+pre code,
+.code-block-wrapper pre code,
+.msg-row.bot .msg-bubble pre code,
+.citation-card pre code,
+pre[class*="language-"] code,
+code[class*="language-"] {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: #d4d4d4 !important;
+}
+
+/* VS Code Dark+ Code Block & Header */
 .code-block-wrapper {
     position: relative;
     margin: 14px 0 !important;
-    border-radius: var(--radius-md) !important;
-    background: #141824 !important;
-    border: 1px solid var(--code-border) !important;
+    border-radius: 8px !important;
+    background: #1e1e1e !important;
+    border: 1px solid #333333 !important;
     overflow: hidden !important;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
 .code-block-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 7px 14px;
-    background: #0d111a;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 8px 14px;
+    background: #252526;
+    border-bottom: 1px solid #333333;
     user-select: none;
 }
 
 [data-theme="light"] .code-block-wrapper {
-    background: #1e293b !important;
-    border-color: #cbd5e1 !important;
+    background: #1e1e1e !important;
+    border-color: #333333 !important;
 }
 
 [data-theme="light"] .code-block-header {
-    background: #0f172a;
-    border-bottom-color: rgba(255, 255, 255, 0.1);
+    background: #252526 !important;
+    border-bottom-color: #333333 !important;
 }
 
 .code-lang-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'JetBrains Mono', Consolas, monospace;
     font-size: 0.775rem;
     font-weight: 500;
-    color: #94a3b8;
+    color: #cccccc;
     text-transform: lowercase;
     letter-spacing: 0.02em;
 }
@@ -1357,18 +1375,18 @@ html, body {
     gap: 6px;
     background: transparent;
     border: none;
-    color: #94a3b8;
+    color: #858585;
     font-size: 0.775rem;
     font-weight: 500;
     font-family: inherit;
     cursor: pointer;
     padding: 3px 8px;
-    border-radius: var(--radius-sm);
+    border-radius: 4px;
     transition: all 0.15s ease;
 }
 
 .btn-code-action:hover {
-    color: #f8fafc;
+    color: #ffffff;
     background: rgba(255, 255, 255, 0.09);
 }
 
@@ -1378,27 +1396,203 @@ html, body {
 
 .btn-code-action.success,
 .btn-code-action.copied {
-    color: var(--accent-emerald) !important;
+    color: #4ec9b0 !important;
 }
 
 .code-block-wrapper pre,
-.msg-row.bot .msg-bubble pre {
+.msg-row.bot .msg-bubble pre,
+pre[class*="language-"] {
     margin: 0 !important;
     border: none !important;
     border-radius: 0 !important;
-    background: transparent !important;
+    background: #1e1e1e !important;
     padding: 14px 16px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 0.835rem !important;
+    font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace !important;
+    font-size: 0.85rem !important;
     line-height: 1.6 !important;
     overflow-x: auto !important;
+    color: #d4d4d4 !important;
 }
 
-.code-block-wrapper pre code {
+.code-block-wrapper pre code,
+.msg-row.bot .msg-bubble pre code,
+code[class*="language-"],
+pre[class*="language-"] code {
     background: transparent !important;
     border: none !important;
     padding: 0 !important;
-    color: #f1f5f9;
+    color: #d4d4d4 !important;
+    font-family: inherit !important;
+}
+
+/* ==========================================================================
+   VS Code Dark+ Syntax Highlighting Theme Tokens
+   ========================================================================== */
+
+/* Comments (Forest Green, italic) */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+    color: #6a9955 !important;
+    font-style: italic !important;
+    background: transparent !important;
+}
+
+/* Punctuation & Delimiters */
+.token.punctuation {
+    color: #d4d4d4 !important;
+    background: transparent !important;
+}
+
+/* Control flow keywords (Pink/Magenta) */
+.token.keyword {
+    color: #c586c0 !important;
+    font-weight: 500 !important;
+    background: transparent !important;
+}
+
+/* Storage / Definition keywords (VS Code Blue) */
+.token.keyword.keyword-const,
+.token.keyword.keyword-let,
+.token.keyword.keyword-var,
+.token.keyword.keyword-function,
+.token.keyword.keyword-class,
+.token.keyword.keyword-def,
+.token.keyword.keyword-async,
+.token.keyword.keyword-await,
+.token.keyword.keyword-new,
+.token.keyword.keyword-typeof,
+.token.keyword.keyword-instanceof,
+.token.keyword.keyword-void,
+.token.storage,
+.token.modifier {
+    color: #569cd6 !important;
+    background: transparent !important;
+}
+
+/* Classes, Interfaces, Builtins, Types (Teal Cyan) */
+.token.class-name,
+.token.class,
+.token.builtin,
+.token.type,
+.token.maybe-class-name {
+    color: #4ec9b0 !important;
+    background: transparent !important;
+}
+
+/* Functions & Methods (Soft Yellow) */
+.token.function,
+.token.function-variable,
+.token.method {
+    color: #dcdcaa !important;
+    background: transparent !important;
+}
+
+/* Strings & Template Strings (Warm Coral / Peach) */
+.token.string,
+.token.char,
+.token.template-string,
+.token.template-punctuation,
+.token.string-interpolation {
+    color: #ce9178 !important;
+    background: transparent !important;
+}
+
+/* Numbers & Booleans (Sage Green) */
+.token.number,
+.token.boolean,
+.token.constant.boolean {
+    color: #b5cea8 !important;
+    background: transparent !important;
+}
+
+/* Variables, Properties, Parameters, Constants (Light Sky Blue) */
+.token.variable,
+.token.property,
+.token.constant,
+.token.symbol,
+.token.parameter {
+    color: #9cdcfe !important;
+    background: transparent !important;
+}
+
+/* HTML / XML Tags (VS Code Blue) */
+.token.tag,
+.token.tag .token.tag {
+    color: #569cd6 !important;
+    background: transparent !important;
+}
+
+/* HTML / XML Bracket Punctuation (<, >, </, />) */
+.token.tag .token.punctuation {
+    color: #808080 !important;
+    background: transparent !important;
+}
+
+/* HTML / XML Attributes (Light Sky Blue) */
+.token.attr-name {
+    color: #9cdcfe !important;
+    background: transparent !important;
+}
+
+/* HTML / XML Attribute Values (Warm Peach) */
+.token.attr-value,
+.token.attr-value .token.punctuation {
+    color: #ce9178 !important;
+    background: transparent !important;
+}
+
+/* CSS Selectors (Warm Gold / Tan) */
+.token.selector {
+    color: #d7ba7d !important;
+    background: transparent !important;
+}
+
+/* CSS Properties (Light Sky Blue) */
+.token.property.property-name {
+    color: #9cdcfe !important;
+    background: transparent !important;
+}
+
+/* CSS Units & Numbers (Sage Green) */
+.token.unit {
+    color: #b5cea8 !important;
+    background: transparent !important;
+}
+
+/* CSS Hex / Color */
+.token.hexcode,
+.token.color {
+    color: #ce9178 !important;
+    background: transparent !important;
+}
+
+/* Operators, Regex, URLs */
+.token.operator {
+    color: #d4d4d4 !important;
+    background: transparent !important;
+}
+
+.token.regex {
+    color: #d16969 !important;
+    background: transparent !important;
+}
+
+.token.url,
+.token.entity {
+    color: #9cdcfe !important;
+    background: transparent !important;
+}
+
+/* Prevent any token from having background shading */
+.token,
+.code-block-wrapper .token,
+.citation-card .token,
+pre[class*="language-"] .token {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
 }
 
 /* AI Answer Actions Bar & Copy Button */
@@ -1508,10 +1702,14 @@ html, body {
 
 .citation-card pre {
     margin: 0 !important;
-    padding: 10px 14px !important;
-    background: var(--code-bg) !important;
+    padding: 12px 16px !important;
+    background: #1e1e1e !important;
     border: none !important;
     border-radius: 0 !important;
+    font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace !important;
+    font-size: 0.82rem !important;
+    line-height: 1.6 !important;
+    color: #d4d4d4 !important;
 }
 
 /* Execution Trace */

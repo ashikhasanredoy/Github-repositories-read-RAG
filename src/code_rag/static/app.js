@@ -1325,6 +1325,72 @@ document.addEventListener("DOMContentLoaded", () => {
         return `code.${ext}`;
     }
 
+    function detectCodeLanguage(code) {
+        if (!code || !code.trim()) return "text";
+        const sample = code.slice(0, 1000);
+        // HTML / XML
+        if (/^\s*<(!DOCTYPE|html|div|span|p|head|body|script|style|svg|table|form|nav|header|button|input|h[1-6]|ul|li|section|article|main|aside)/i.test(sample) ||
+            /<\/[a-zA-Z0-9_-]+>/i.test(sample) ||
+            /<[a-zA-Z0-9_-]+[^>]*class=["'][^"']*["']/i.test(sample)) {
+            return "markup";
+        }
+        // JSON
+        if (/^\s*[\{\[][\s\S]*["'][\s\S]*:[\s\S]*[\}\]]\s*$/.test(sample.trim())) {
+            return "json";
+        }
+        // Python
+        if (/\b(def\s+[a-zA-Z_]\w*\s*\(|import\s+[a-zA-Z_]|from\s+[a-zA-Z_].*import|class\s+[a-zA-Z_]\w*(\s*\(|:)|elif\s+|if\s+__name__\s*==|print\s*\(|self\.[a-zA-Z_])/.test(sample)) {
+            return "python";
+        }
+        // JavaScript / TypeScript
+        if (/\b(const|let|var)\s+[a-zA-Z_$]\w*\s*=|function\s+[a-zA-Z_$]\w*\(|=>\s*\{|\bconsole\.(log|error|warn)|\bdocument\.query|async\s+function|export\s+(default|const)|\baddEventListener\b/.test(sample)) {
+            return "javascript";
+        }
+        // CSS
+        if (/^[.#]?[a-zA-Z0-9_-]+\s*\{[\s\S]*:[^;]+;[\s\S]*\}/m.test(sample) || /@(media|keyframes|import)\b/.test(sample)) {
+            return "css";
+        }
+        // Bash / Shell
+        if (/^\s*(#!\/bin\/bash|npm\s+(run|install)|pip\s+install|git\s+(commit|push|pull|clone)|cd\s+|sudo\s+|echo\s+)/m.test(sample)) {
+            return "bash";
+        }
+        // SQL
+        if (/\b(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM|CREATE\s+TABLE|ALTER\s+TABLE)\b/i.test(sample)) {
+            return "sql";
+        }
+        return "javascript";
+    }
+
+    // Configure marked highlight parser for instant streaming highlights
+    if (window.marked && typeof marked.setOptions === "function") {
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            highlight: function(code, lang) {
+                if (window.Prism) {
+                    let grammarLang = (lang || "").toLowerCase().trim();
+                    if (!grammarLang || grammarLang === "code" || grammarLang === "text") {
+                        grammarLang = detectCodeLanguage(code);
+                    }
+                    if (grammarLang === "html" || grammarLang === "xml") grammarLang = "markup";
+                    if (grammarLang === "py") grammarLang = "python";
+                    if (grammarLang === "js") grammarLang = "javascript";
+                    if (grammarLang === "ts") grammarLang = "typescript";
+                    if (grammarLang === "sh") grammarLang = "bash";
+
+                    if (Prism.languages[grammarLang]) {
+                        try {
+                            return Prism.highlight(code, Prism.languages[grammarLang], grammarLang);
+                        } catch (e) {
+                            return code;
+                        }
+                    }
+                }
+                return code;
+            }
+        });
+    }
+
     function enhanceCodeBlocks(container) {
         if (!container) return;
         const pres = container.querySelectorAll("pre");
@@ -1337,18 +1403,45 @@ document.addEventListener("DOMContentLoaded", () => {
             let lang = "code";
             if (codeEl) {
                 const match = codeEl.className.match(/language-([a-zA-Z0-9_-]+)/);
-                if (match && match[1]) {
-                    lang = match[1];
+                if (match && match[1] && match[1] !== "none" && match[1] !== "text" && match[1] !== "code") {
+                    lang = match[1].toLowerCase();
+                } else {
+                    const text = codeEl.textContent || "";
+                    lang = detectCodeLanguage(text);
+                }
+
+                if (lang === "html" || lang === "xml" || lang === "svg") {
+                    lang = "markup";
+                } else if (lang === "py") {
+                    lang = "python";
+                } else if (lang === "js") {
+                    lang = "javascript";
+                } else if (lang === "ts") {
+                    lang = "typescript";
+                } else if (lang === "sh") {
+                    lang = "bash";
+                }
+
+                codeEl.className = `language-${lang}`;
+                pre.className = `language-${lang}`;
+
+                if (window.Prism) {
+                    try {
+                        Prism.highlightElement(codeEl);
+                    } catch (e) {
+                        console.debug("Prism highlightElement error:", e);
+                    }
                 }
             }
 
             const wrapper = document.createElement("div");
             wrapper.className = "code-block-wrapper";
 
+            const displayLang = lang === "markup" ? "html" : lang;
             const header = document.createElement("div");
             header.className = "code-block-header";
             header.innerHTML = `
-                <span class="code-lang-label">${escapeHtml(lang)}</span>
+                <span class="code-lang-label">${escapeHtml(displayLang)}</span>
                 <div class="code-block-actions">
                     <button type="button" class="btn-code-action btn-copy-code" title="Copy code">
                         <svg class="action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1473,6 +1566,11 @@ document.addEventListener("DOMContentLoaded", () => {
             element.innerHTML = formatMarkdownFallback(markdownText);
         }
         enhanceCodeBlocks(element);
+        if (window.Prism) {
+            try {
+                Prism.highlightAllUnder(element);
+            } catch (e) {}
+        }
     }
 
     function renderMarkdown(element, markdownText) {
@@ -1483,7 +1581,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         enhanceCodeBlocks(element);
         if (window.Prism) {
-            Prism.highlightAllUnder(element);
+            try {
+                Prism.highlightAllUnder(element);
+            } catch (e) {}
         }
     }
 
