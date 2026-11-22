@@ -35,6 +35,9 @@
     
     --code-bg: #090D16;
     --code-border: rgba(255, 255, 255, 0.08);
+    --inline-code-bg: rgba(255, 255, 255, 0.09);
+    --inline-code-color: #E2E8F0;
+    --inline-code-border: rgba(255, 255, 255, 0.16);
     
     --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
@@ -80,6 +83,9 @@
     
     --code-bg: #1E293B;
     --code-border: #CBD5E1;
+    --inline-code-bg: #E2E8F0;
+    --inline-code-color: #0F172A;
+    --inline-code-border: #94A3B8;
     
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -1310,33 +1316,68 @@ html, body {
     margin-bottom: 6px;
 }
 
-/* Inline code (only when NOT inside a pre block) - Dark Mode */
+/* Inline code (only when NOT inside a pre block) - Dark Mode & Universal Base */
+:not(pre) > code,
+code:not(pre code),
 .msg-row.bot .msg-bubble :not(pre) > code,
 .msg-row.user .msg-bubble :not(pre) > code,
 .guide-modal-card :not(pre) > code,
-.markdown-body :not(pre) > code,
-:not(pre) > code {
-    background: rgba(255, 255, 255, 0.08) !important;
-    color: #e2e8f0 !important;
-    padding: 2px 6px !important;
-    border-radius: 4px !important;
-    font-family: 'JetBrains Mono', Consolas, monospace !important;
-    font-size: 0.85em !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    font-weight: 500 !important;
+.markdown-body :not(pre) > code {
+    background: var(--inline-code-bg, rgba(255, 255, 255, 0.09)) !important;
+    color: var(--inline-code-color, #e2e8f0) !important;
+    padding: 2px 7px !important;
+    border-radius: 5px !important;
+    font-family: 'JetBrains Mono', Consolas, Monaco, monospace !important;
+    font-size: 0.86em !important;
+    border: 1px solid var(--inline-code-border, rgba(255, 255, 255, 0.16)) !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.01em !important;
+    word-break: break-word !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+    display: inline-block !important;
+    line-height: 1.35 !important;
+    vertical-align: baseline !important;
 }
 
 /* Day Mode / Light Mode High-Contrast Styling for Inline Code, File Names & Folder Paths */
+[data-theme="light"] code:not(pre code),
+[data-theme="light"] :not(pre) > code,
 [data-theme="light"] .msg-row.bot .msg-bubble :not(pre) > code,
 [data-theme="light"] .msg-row.user .msg-bubble :not(pre) > code,
+[data-theme="light"] .msg-bubble code:not(pre code),
 [data-theme="light"] .guide-modal-card :not(pre) > code,
+[data-theme="light"] .guide-feature-item code:not(pre code),
+[data-theme="light"] .guide-card code:not(pre code),
+[data-theme="light"] .guide-prompt-item code:not(pre code),
 [data-theme="light"] .markdown-body :not(pre) > code,
-[data-theme="light"] :not(pre) > code {
-    background: #E8EEF5 !important;
+[data-theme="light"] p code:not(pre code),
+[data-theme="light"] li code:not(pre code),
+[data-theme="light"] span code:not(pre code),
+[data-theme="light"] strong code:not(pre code),
+[data-theme="light"] em code:not(pre code),
+[data-theme="light"] h1 code:not(pre code),
+[data-theme="light"] h2 code:not(pre code),
+[data-theme="light"] h3 code:not(pre code),
+[data-theme="light"] h4 code:not(pre code),
+[data-theme="light"] td code:not(pre code) {
+    background: #E2E8F0 !important;
     color: #0F172A !important;
-    border: 1px solid #CBD5E1 !important;
-    font-weight: 600 !important;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    border: 1px solid #94A3B8 !important;
+    font-weight: 650 !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Prevent syntax highlighter tokens inside inline code in Day Mode from washing out */
+[data-theme="light"] code:not(pre code) .token,
+[data-theme="light"] :not(pre) > code .token,
+[data-theme="light"] .msg-bubble code:not(pre code) .token,
+[data-theme="light"] .markdown-body code:not(pre code) .token,
+[data-theme="light"] .guide-modal-card code:not(pre code) .token {
+    color: #0F172A !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    text-shadow: none !important;
 }
 
 /* Ensure code blocks and anything inside pre NEVER has inline code box styles */
@@ -1345,7 +1386,7 @@ pre code,
 .msg-row.bot .msg-bubble pre code,
 .citation-card pre code,
 pre[class*="language-"] code,
-code[class*="language-"] {
+pre code[class*="language-"] {
     background: transparent !important;
     border: none !important;
     padding: 0 !important;
@@ -1448,7 +1489,7 @@ pre[class*="language-"] {
 
 .code-block-wrapper pre code,
 .msg-row.bot .msg-bubble pre code,
-code[class*="language-"],
+pre code[class*="language-"],
 pre[class*="language-"] code {
     background: transparent !important;
     border: none !important;
