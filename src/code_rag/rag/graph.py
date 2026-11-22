@@ -9,6 +9,7 @@ from src.code_rag.config import settings
 from src.code_rag.rag.state import CodeRAGState
 from src.code_rag.rag.retriever import HybridRetriever, detect_structure_intent
 from src.code_rag.services.ollama import OllamaService
+from src.code_rag.rag.conversation import ConversationHandler
 from src.code_rag.rag.export_mode import (
     detect_export_intent,
     build_export_manifest_and_tree,
@@ -214,6 +215,7 @@ class CodeRAGGraph:
                 self.sqlite_store = SQLiteStore()
             except Exception:
                 self.sqlite_store = None
+        self.conversation_handler = ConversationHandler()
         self._export_sessions: Dict[str, Dict[str, Any]] = {}
 
     def analyze_query(self, state: CodeRAGState) -> Dict[str, Any]:
@@ -221,21 +223,7 @@ class CodeRAGGraph:
         trace = list(state.get("trace_steps", []))
         trace.append(f"Analyzing query: '{question}'")
 
-        # 1. Check for user-provided code
-        code_info = extract_user_code_from_query(question)
-        if code_info:
-            line_count = len(code_info["code"].splitlines())
-            trace.append(f"Detected user-provided code snippet ({line_count} lines). Initializing line-by-line explainer.")
-            return {
-                "query_intent": "user_code_line_by_line",
-                "query_type": "repository_specific",
-                "extracted_entities": [],
-                "target_files": [],
-                "user_code_snippet": code_info,
-                "trace_steps": trace
-            }
-
-        # 2. Check for Complete Repository Code Export Mode (or continuation)
+        # 0. Check for Complete Repository Code Export active session or history
         conv_id = state.get("conversation_id", "")
         repo_id = state.get("repo_id", "")
         active_session = None
@@ -248,6 +236,77 @@ class CodeRAGGraph:
             active_session = self._export_sessions.get(f"{conv_id}_{repo_id}") or self._export_sessions.get(repo_id)
 
         has_active = bool(active_session and active_session.get("pending_files"))
+
+        # Fetch prior conversation history for context evaluation
+        prior_history = state.get("history") or []
+        if not prior_history and self.sqlite_store and conv_id:
+            try:
+                all_msgs = self.sqlite_store.get_messages(conv_id)
+                completed = [m for m in all_msgs if m.get("status") == "completed" and m.get("content")]
+                if completed and completed[-1].get("content") == question:
+                    prior_history = completed[:-1]
+                else:
+                    prior_history = completed
+            except Exception as err:
+                logger.warning("Failed to fetch conversation history: %s", err)
+
+        # 1. Natural Conversational Intelligence (Greeting, Small Talk, Mixed Intent, Context Followup)
+        conv_eval = self.conversation_handler.detect_intent(
+            question,
+            history=prior_history,
+            active_session=active_session
+        )
+        conversational_prefix = ""
+
+        if conv_eval.get("type") == "pure_conversation":
+            trace.append(f"Pure conversational query detected ('{conv_eval.get('category')}'). Bypassing repository retrieval.")
+            return {
+                "query_intent": "pure_conversation",
+                "query_type": "pure_conversation",
+                "is_pure_conversation": True,
+                "conversational_response": conv_eval.get("response", "Hello! How can I help you today?"),
+                "conversation_intent": conv_eval,
+                "extracted_entities": [],
+                "target_files": [],
+                "retrieved_docs": [],
+                "trace_steps": trace
+            }
+        elif conv_eval.get("type") == "mixed_intent":
+            conversational_prefix = conv_eval.get("conversational_prefix", "")
+            trace.append(f"Mixed intent detected ({conv_eval.get('category')}). Preserving greeting prefix.")
+            cleaned_tech = conv_eval.get("cleaned_technical_question") or conv_eval.get("technical_question", question)
+            question = cleaned_tech
+            state["question"] = question
+            state["conversational_prefix"] = conversational_prefix
+        elif conv_eval.get("type") == "context_followup":
+            context_q = conv_eval.get("context_query", question)
+            trace.append(f"Context-aware follow-up resolved: '{context_q}'")
+            state["original_question"] = question
+            question = context_q
+            state["question"] = question
+        elif conv_eval.get("type") == "context_confirmation":
+            trace.append("Context confirmation detected ('Yes'). Resuming pending operation.")
+            last_user_req = next((m for m in reversed(prior_history) if m.get("role") == "user" and m.get("content")), None)
+            if last_user_req:
+                question = last_user_req.get("content", question)
+                state["question"] = question
+
+        # 2. Check for user-provided code
+        code_info = extract_user_code_from_query(question)
+        if code_info:
+            line_count = len(code_info["code"].splitlines())
+            trace.append(f"Detected user-provided code snippet ({line_count} lines). Initializing line-by-line explainer.")
+            return {
+                "query_intent": "user_code_line_by_line",
+                "query_type": "repository_specific",
+                "extracted_entities": [],
+                "target_files": [],
+                "user_code_snippet": code_info,
+                "conversational_prefix": conversational_prefix,
+                "trace_steps": trace
+            }
+
+        # 3. Check for Complete Repository Code Export Mode (or continuation)
         export_info = detect_export_intent(question, repo_id=repo_id, has_active_session=has_active)
         if export_info:
             trace.append(
@@ -261,10 +320,11 @@ class CodeRAGGraph:
                 "target_files": [],
                 "export_info": export_info,
                 "export_session": active_session if export_info.get("is_continuation") else None,
+                "conversational_prefix": conversational_prefix,
                 "trace_steps": trace
             }
 
-        # 3. Check for repository structure or architecture request
+        # 4. Check for repository structure or architecture request
         struct_info = detect_structure_intent(question)
         if struct_info:
             sub = struct_info.get("subfolder", "")
@@ -276,17 +336,18 @@ class CodeRAGGraph:
                 "extracted_entities": [],
                 "target_files": [],
                 "structure_info": struct_info,
+                "conversational_prefix": conversational_prefix,
                 "trace_steps": trace
             }
 
-        # 3. Target file extraction (e.g. main.py, auth_service.py)
+        # 5. Target file extraction (e.g. main.py, auth_service.py)
         raw_targets = re.findall(r'[\w\-./\\]+\.[\w]+', question)
         target_files = [
             t for t in raw_targets
             if not any(t.endswith(ext) for ext in ['.com', '.org', '.net', '.io', '.gov', '.edu', '.git'])
         ]
 
-        # 4. General programming vs Repository-specific classification
+        # 6. General programming vs Repository-specific classification
         is_general = is_general_programming_query(question, state.get("repo_id", ""))
         query_type = "general_programming" if is_general else "repository_specific"
 
@@ -315,11 +376,21 @@ class CodeRAGGraph:
             "query_type": query_type,
             "extracted_entities": cleaned_entities,
             "target_files": target_files,
+            "conversational_prefix": conversational_prefix,
             "trace_steps": trace
         }
 
     def retrieve_code(self, state: CodeRAGState) -> Dict[str, Any]:
         trace = list(state.get("trace_steps", []))
+
+        # Check for pure conversational query
+        if state.get("is_pure_conversation") or state.get("query_intent") == "pure_conversation":
+            trace.append("Pure conversational query: Bypassing repository retrieval.")
+            return {
+                "retrieved_docs": [],
+                "context_str": "",
+                "trace_steps": trace
+            }
 
         # 0. Check for complete repository code export
         if state.get("query_intent") == "repo_code_export":
@@ -405,6 +476,13 @@ class CodeRAGGraph:
     def grade_relevance(self, state: CodeRAGState) -> Dict[str, Any]:
         trace = list(state.get("trace_steps", []))
 
+        if state.get("is_pure_conversation") or state.get("query_intent") == "pure_conversation":
+            trace.append("Relevance grade: Passed (Pure conversational query).")
+            return {
+                "is_relevant": True,
+                "trace_steps": trace
+            }
+
         if state.get("query_intent") == "repo_code_export":
             trace.append("Relevance grade: Passed (Complete repository code export).")
             return {
@@ -463,6 +541,14 @@ class CodeRAGGraph:
         """
         trace = list(state.get("trace_steps", []))
         trace.append("Validating evidence and checking for potential hallucination...")
+
+        # Pure conversational query
+        if state.get("is_pure_conversation") or state.get("query_intent") == "pure_conversation":
+            trace.append("Evidence validation: Bypassed for conversational query.")
+            return {
+                "evidence_status": "sufficient",
+                "trace_steps": trace
+            }
 
         # 0. Complete repository code export
         if state.get("query_intent") == "repo_code_export":
@@ -825,9 +911,13 @@ User Question: {question}
         self._export_sessions[cache_key] = session
         self._export_sessions[repo_id] = session
 
+        export_text = "".join(parts)
+        if state.get("conversational_prefix"):
+            export_text = state["conversational_prefix"] + export_text
+
         trace.append(f"Exported files {start_idx + 1} to {end_idx} (total: {total_files}).")
         return {
-            "answer": "".join(parts),
+            "answer": export_text,
             "sources": sources,
             "trace_steps": trace,
             "export_session": session
@@ -836,6 +926,16 @@ User Question: {question}
     def generate_answer(self, state: CodeRAGState) -> Dict[str, Any]:
         trace = list(state.get("trace_steps", []))
         trace.append("Generating response...")
+
+        # Pure conversational query
+        if state.get("is_pure_conversation") or state.get("query_intent") == "pure_conversation":
+            trace.append("Returning direct conversational response.")
+            return {
+                "answer": state.get("conversational_response", "Hello! How can I help you today?"),
+                "sources": [],
+                "trace_steps": trace,
+                "query_intent": "pure_conversation"
+            }
 
         # 0. Check if evidence validation failed completely
         if state.get("evidence_status") == "none":
@@ -951,6 +1051,9 @@ User Question: {question}
                     "snippet": d.get("content", "")
                 })
 
+        if state.get("conversational_prefix") and not answer.startswith(state["conversational_prefix"]):
+            answer = state["conversational_prefix"] + answer
+
         trace.append("Answer generated.")
         return {
             "answer": answer,
@@ -969,7 +1072,16 @@ User Question: {question}
         workflow.add_node("generate_answer", self.generate_answer)
 
         workflow.set_entry_point("analyze_query")
-        workflow.add_edge("analyze_query", "retrieve_code")
+
+        def route_after_analysis(s: CodeRAGState) -> str:
+            if s.get("is_pure_conversation") or s.get("query_intent") == "pure_conversation":
+                return "generate_answer"
+            return "retrieve_code"
+
+        workflow.add_conditional_edges("analyze_query", route_after_analysis, {
+            "generate_answer": "generate_answer",
+            "retrieve_code": "retrieve_code"
+        })
         workflow.add_edge("retrieve_code", "grade_relevance")
 
         def route_after_grading(s: CodeRAGState) -> str:
@@ -992,6 +1104,26 @@ User Question: {question}
         # 1. Analyze
         state.update(self.analyze_query(state))
         yield {"type": "trace", "step": state["trace_steps"][-1]}
+
+        # Check for pure conversational query
+        if state.get("is_pure_conversation") or state.get("query_intent") == "pure_conversation":
+            yield {"type": "trace", "step": "Streaming conversational response..."}
+            resp = state.get("conversational_response", "Hello! How can I help you today?")
+            words = resp.split(" ")
+            for idx, word in enumerate(words):
+                chunk = word if idx == len(words) - 1 else word + " "
+                yield {"type": "token", "content": chunk}
+                time.sleep(0.012)
+            yield {
+                "type": "done",
+                "sources": [],
+                "trace_steps": state["trace_steps"],
+                "query_intent": "pure_conversation"
+            }
+            return
+
+        if state.get("conversational_prefix"):
+            yield {"type": "token", "content": state["conversational_prefix"]}
 
         # 2. Check for direct user code
         if state.get("user_code_snippet"):
@@ -1215,7 +1347,6 @@ User Question: {question}
                 except Exception:
                     pass
         elif full_file_doc:
-            import time
             rel_p = full_file_doc.get("metadata", {}).get("rel_path", "")
             lang = full_file_doc.get("metadata", {}).get("language", "python")
             raw_content = full_file_doc.get("content", "")
@@ -1278,6 +1409,26 @@ User Question: {question}
         # 1. Analyze
         state.update(self.analyze_query(state))
         yield {"type": "trace", "step": state["trace_steps"][-1]}
+
+        # Check for pure conversational query
+        if state.get("is_pure_conversation") or state.get("query_intent") == "pure_conversation":
+            yield {"type": "trace", "step": "Streaming conversational response..."}
+            resp = state.get("conversational_response", "Hello! How can I help you today?")
+            words = resp.split(" ")
+            for idx, word in enumerate(words):
+                chunk = word if idx == len(words) - 1 else word + " "
+                yield {"type": "token", "content": chunk}
+                await asyncio.sleep(0.012)
+            yield {
+                "type": "done",
+                "sources": [],
+                "trace_steps": state["trace_steps"],
+                "query_intent": "pure_conversation"
+            }
+            return
+
+        if state.get("conversational_prefix"):
+            yield {"type": "token", "content": state["conversational_prefix"]}
 
         # 2. Check for direct user code
         if state.get("user_code_snippet"):

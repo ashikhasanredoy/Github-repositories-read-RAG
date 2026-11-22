@@ -5,7 +5,7 @@ class CodeRAGState(TypedDict, total=False):
     original_question: str
     repo_id: str
     query_intent: str
-    query_type: str              # "repository_specific" or "general_programming"
+    query_type: str              # "repository_specific", "general_programming", or "pure_conversation"
     evidence_status: str         # "sufficient", "partial", "none"
     extracted_entities: List[str]
     target_files: List[str]
@@ -21,3 +21,8 @@ class CodeRAGState(TypedDict, total=False):
     export_session: Optional[Dict[str, Any]]
     conversation_id: Optional[str]
     turn_id: Optional[str]
+    # Natural Conversational Intelligence
+    is_pure_conversation: Optional[bool]
+    conversational_response: Optional[str]
+    conversational_prefix: Optional[str]
+    conversation_intent: Optional[Dict[str, Any]]
