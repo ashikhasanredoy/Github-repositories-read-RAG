@@ -81,10 +81,30 @@ class SQLiteStore:
                 );
                 """)
 
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS export_sessions (
+                    export_id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    repo_id TEXT NOT NULL,
+                    repository_name TEXT NOT NULL,
+                    ordered_file_manifest TEXT NOT NULL,
+                    current_file_index INTEGER NOT NULL DEFAULT 0,
+                    total_file_count INTEGER NOT NULL DEFAULT 0,
+                    completed_files TEXT NOT NULL DEFAULT '[]',
+                    pending_files TEXT NOT NULL DEFAULT '[]',
+                    failed_files TEXT NOT NULL DEFAULT '[]',
+                    export_status TEXT NOT NULL DEFAULT 'in_progress',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
+                );
+                """)
+
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at DESC);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_conv ON turns(conversation_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_turn ON messages(turn_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_export_sessions_conv_repo ON export_sessions(conversation_id, repo_id);")
         logger.info("SQLite chat history initialized at %s", self.db_path)
 
     # -------------------------------------------------------------
@@ -437,3 +457,92 @@ class SQLiteStore:
                         pass
                 messages.append(m)
             return messages
+
+    # -------------------------------------------------------------
+    # Complete Repository Code Export Session Operations
+    # -------------------------------------------------------------
+
+    def save_export_session(self, session: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Creates or updates a persistent export session for sequential code export.
+        """
+        now = get_utc_now()
+        export_id = session.get("export_id")
+        conv_id = session.get("conversation_id", "")
+        repo_id = session.get("repo_id", "")
+        repo_name = session.get("repository_name", repo_id)
+
+        # Ensure conversation exists to satisfy foreign key constraint
+        if conv_id:
+            try:
+                self.create_or_get_conversation(conv_id, repo_id=repo_id)
+            except Exception:
+                pass
+
+        manifest = json.dumps(session.get("ordered_file_manifest", []))
+        idx = session.get("current_file_index", 0)
+        total = session.get("total_file_count", 0)
+        completed = json.dumps(session.get("completed_files", []))
+        pending = json.dumps(session.get("pending_files", []))
+        failed = json.dumps(session.get("failed_files", []))
+        status = session.get("export_status", "in_progress")
+        created_at = session.get("created_at", now)
+
+        with self.get_connection() as conn:
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO export_sessions (
+                        export_id, conversation_id, repo_id, repository_name,
+                        ordered_file_manifest, current_file_index, total_file_count,
+                        completed_files, pending_files, failed_files,
+                        export_status, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(export_id) DO UPDATE SET
+                        current_file_index = excluded.current_file_index,
+                        total_file_count = excluded.total_file_count,
+                        completed_files = excluded.completed_files,
+                        pending_files = excluded.pending_files,
+                        failed_files = excluded.failed_files,
+                        export_status = excluded.export_status,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        export_id, conv_id, repo_id, repo_name,
+                        manifest, idx, total,
+                        completed, pending, failed,
+                        status, created_at, now
+                    )
+                )
+        session["updated_at"] = now
+        return session
+
+    def get_latest_export_session(
+        self,
+        conversation_id: str,
+        repo_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves the latest export session for the given conversation and repo.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM export_sessions
+                WHERE conversation_id = ? AND repo_id = ?
+                ORDER BY updated_at DESC LIMIT 1
+                """,
+                (conversation_id, repo_id)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            try:
+                res["ordered_file_manifest"] = json.loads(res.get("ordered_file_manifest", "[]"))
+                res["completed_files"] = json.loads(res.get("completed_files", "[]"))
+                res["pending_files"] = json.loads(res.get("pending_files", "[]"))
+                res["failed_files"] = json.loads(res.get("failed_files", "[]"))
+            except Exception:
+                pass
+            return res

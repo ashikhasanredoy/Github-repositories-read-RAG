@@ -96,12 +96,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const guideModalCloseBtn = document.getElementById("guideModalCloseBtn");
     const guideModalGotItBtn = document.getElementById("guideModalGotItBtn");
     const projectGuideBtn = document.getElementById("projectGuideBtn");
+    const guideSearchInput = document.getElementById("guideSearchInput");
+    const guideSearchClearBtn = document.getElementById("guideSearchClearBtn");
+    const guideResetSearchBtn = document.getElementById("guideResetSearchBtn");
+    const guideEmptySearch = document.getElementById("guideEmptySearch");
+    const guideModalContent = document.getElementById("guideModalContent");
+    const guideTabBtns = document.querySelectorAll(".guide-tab-btn");
 
     function openGuideModal() {
         if (!guideModalOverlay) return;
         guideModalOverlay.style.display = "flex";
         requestAnimationFrame(() => {
             guideModalOverlay.classList.add("active");
+            if (guideSearchInput) {
+                guideSearchInput.focus();
+            }
         });
     }
 
@@ -111,6 +120,90 @@ document.addEventListener("DOMContentLoaded", () => {
         setTimeout(() => {
             guideModalOverlay.style.display = "none";
         }, 180);
+    }
+
+    // Try Prompt click handler inside guide modal
+    if (guideModalContent) {
+        guideModalContent.addEventListener("click", (e) => {
+            const tryBtn = e.target.closest(".btn-try-prompt");
+            if (tryBtn) {
+                const prompt = tryBtn.getAttribute("data-prompt");
+                if (prompt && queryInput) {
+                    queryInput.value = prompt;
+                    closeGuideModal();
+                    queryInput.focus();
+                    if (typeof autoResizeTextarea === "function") {
+                        autoResizeTextarea();
+                    }
+                    showToast("Prompt inserted! Press Enter to send.", "info", 3000);
+                }
+            }
+        });
+    }
+
+    // Category Tabs & Instant Search Filtering for Guide Modal
+    let currentGuideTab = "all";
+
+    function applyGuideFilters() {
+        const query = (guideSearchInput ? guideSearchInput.value : "").trim().toLowerCase();
+        if (guideSearchClearBtn) {
+            guideSearchClearBtn.style.display = query ? "block" : "none";
+        }
+
+        const sections = document.querySelectorAll("#guideModalContent .guide-section");
+        let visibleCount = 0;
+
+        sections.forEach(section => {
+            const cats = (section.getAttribute("data-guide-cat") || "").toLowerCase().split(" ");
+            const matchesTab = (currentGuideTab === "all") || cats.includes(currentGuideTab);
+
+            let matchesQuery = true;
+            if (query) {
+                const text = section.innerText.toLowerCase();
+                matchesQuery = text.includes(query);
+            }
+
+            if (matchesTab && matchesQuery) {
+                section.style.display = "flex";
+                visibleCount++;
+            } else {
+                section.style.display = "none";
+            }
+        });
+
+        if (guideEmptySearch) {
+            guideEmptySearch.style.display = (visibleCount === 0) ? "flex" : "none";
+        }
+    }
+
+    guideTabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            guideTabBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            currentGuideTab = btn.getAttribute("data-guide-tab") || "all";
+            applyGuideFilters();
+        });
+    });
+
+    if (guideSearchInput) {
+        guideSearchInput.addEventListener("input", applyGuideFilters);
+    }
+    if (guideSearchClearBtn) {
+        guideSearchClearBtn.addEventListener("click", () => {
+            guideSearchInput.value = "";
+            applyGuideFilters();
+            guideSearchInput.focus();
+        });
+    }
+    if (guideResetSearchBtn) {
+        guideResetSearchBtn.addEventListener("click", () => {
+            if (guideSearchInput) guideSearchInput.value = "";
+            currentGuideTab = "all";
+            guideTabBtns.forEach(b => {
+                b.classList.toggle("active", b.getAttribute("data-guide-tab") === "all");
+            });
+            applyGuideFilters();
+        });
     }
 
     if (projectGuideBtn) {
@@ -597,7 +690,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Global shortcut Ctrl+B / Cmd+B to toggle sidebar, Ctrl+N / Alt+N to new chat
+        // Global shortcut Ctrl+B / Cmd+B to toggle sidebar, Ctrl+N / Alt+N to new chat, F1 / ? to open guide
         document.addEventListener("keydown", (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
                 e.preventDefault();
@@ -605,6 +698,9 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") || (e.altKey && e.key.toLowerCase() === "n")) {
                 e.preventDefault();
                 startNewConversation(true);
+            } else if (e.key === "F1" || ((e.ctrlKey || e.metaKey) && e.key === "/") || (e.key === "?" && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName))) {
+                e.preventDefault();
+                openGuideModal();
             }
         });
 

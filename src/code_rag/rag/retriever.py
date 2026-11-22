@@ -245,6 +245,137 @@ class HybridRetriever:
         full_file_chunks.sort(key=lambda x: x.get("match_score", 0), reverse=True)
         return full_file_chunks
 
+    def search_disk_for_symbols(self, repo_id: str, symbols: List[str]) -> List[Dict[str, Any]]:
+        """
+        Deep disk recovery: searches the repository filesystem for specific symbol definitions
+        (functions, classes, methods) if hybrid vector/BM25 retrieval missed them.
+        """
+        repo_dir = self.cloner.get_repo_path(repo_id)
+        if not repo_dir or not repo_dir.exists():
+            return []
+
+        ignore_dirs = {".git", ".venv", "venv", "__pycache__", "node_modules", "dist", "build", ".pytest_cache"}
+        matched_chunks = []
+        seen = set()
+
+        for root, dirs, files in os.walk(repo_dir):
+            dirs[:] = [d for d in dirs if d not in ignore_dirs and not d.startswith(".")]
+            for f in files:
+                ext = Path(f).suffix.lower()
+                if ext not in LANGUAGE_MAP:
+                    continue
+                file_p = Path(root) / f
+                try:
+                    rel_p = str(file_p.relative_to(repo_dir))
+                except ValueError:
+                    rel_p = f
+
+                try:
+                    with open(file_p, "r", encoding="utf-8", errors="replace") as fp:
+                        lines = fp.readlines()
+                except Exception:
+                    continue
+
+                for sym in symbols:
+                    sym_clean = sym.strip("()")
+                    if not sym_clean or len(sym_clean) < 2:
+                        continue
+                    sym_regex = re.compile(
+                        rf'\b(?:def|class|function|const|let|var|async\s+def)\s+{re.escape(sym_clean)}\b|\b{re.escape(sym_clean)}\s*\(|\b{re.escape(sym_clean)}\s*=',
+                        re.IGNORECASE
+                    )
+                    for line_idx, line in enumerate(lines, 1):
+                        if sym_regex.search(line):
+                            chunk_key = f"{rel_p}:{sym_clean}"
+                            if chunk_key in seen:
+                                continue
+                            seen.add(chunk_key)
+
+                            start_l = max(1, line_idx - 5)
+                            end_l = min(len(lines), line_idx + 25)
+                            content = "".join(lines[start_l - 1:end_l])
+                            matched_chunks.append({
+                                "chunk_id": f"{repo_id}_disk_{rel_p}_{line_idx}",
+                                "content": content,
+                                "metadata": {
+                                    "rel_path": rel_p,
+                                    "language": LANGUAGE_MAP.get(ext, "text"),
+                                    "symbol_name": sym_clean,
+                                    "symbol_type": "recovered_symbol",
+                                    "start_line": start_l,
+                                    "end_line": end_l,
+                                    "is_full_file": False
+                                },
+                                "rrf_score": 500.0
+                            })
+                            if len(matched_chunks) >= 4:
+                                return matched_chunks
+        return matched_chunks
+
+    def search_disk_for_keywords(self, repo_id: str, keywords: List[str]) -> List[Dict[str, Any]]:
+        """
+        Deep disk recovery: searches the repository filesystem for core semantic subject keywords
+        if hybrid vector/BM25 retrieval returned unrelated chunks.
+        """
+        repo_dir = self.cloner.get_repo_path(repo_id)
+        if not repo_dir or not repo_dir.exists():
+            return []
+
+        ignore_dirs = {".git", ".venv", "venv", "__pycache__", "node_modules", "dist", "build", ".pytest_cache"}
+        matched_chunks = []
+        seen = set()
+
+        for root, dirs, files in os.walk(repo_dir):
+            dirs[:] = [d for d in dirs if d not in ignore_dirs and not d.startswith(".")]
+            for f in files:
+                ext = Path(f).suffix.lower()
+                if ext not in LANGUAGE_MAP:
+                    continue
+                file_p = Path(root) / f
+                try:
+                    rel_p = str(file_p.relative_to(repo_dir))
+                except ValueError:
+                    rel_p = f
+
+                try:
+                    with open(file_p, "r", encoding="utf-8", errors="replace") as fp:
+                        text = fp.read()
+                except Exception:
+                    continue
+
+                text_lower = text.lower()
+                matches = [kw for kw in keywords if kw.lower() in text_lower]
+                if len(matches) >= max(1, len(keywords) // 2):
+                    if rel_p in seen:
+                        continue
+                    seen.add(rel_p)
+                    lines = text.splitlines(keepends=True)
+                    first_line = 1
+                    for idx, l in enumerate(lines, 1):
+                        if any(kw.lower() in l.lower() for kw in matches):
+                            first_line = idx
+                            break
+                    start_l = max(1, first_line - 5)
+                    end_l = min(len(lines), first_line + 35)
+                    content = "".join(lines[start_l - 1:end_l])
+                    matched_chunks.append({
+                        "chunk_id": f"{repo_id}_disk_kw_{rel_p}_{first_line}",
+                        "content": content,
+                        "metadata": {
+                            "rel_path": rel_p,
+                            "language": LANGUAGE_MAP.get(ext, "text"),
+                            "symbol_name": matches[0],
+                            "symbol_type": "recovered_keyword",
+                            "start_line": start_l,
+                            "end_line": end_l,
+                            "is_full_file": False
+                        },
+                        "rrf_score": 400.0
+                    })
+                    if len(matched_chunks) >= 4:
+                        return matched_chunks
+        return matched_chunks
+
     def retrieve(self, repo_id: str, query: str, top_k: int = settings.FINAL_TOP_K) -> List[Dict[str, Any]]:
         # 1. Target file extraction
         raw_targets = re.findall(r'[\w\-./\\]+\.[\w]+', query)

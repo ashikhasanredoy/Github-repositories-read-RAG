@@ -5,7 +5,10 @@ class CodeRAGState(TypedDict, total=False):
     original_question: str
     repo_id: str
     query_intent: str
+    query_type: str              # "repository_specific" or "general_programming"
+    evidence_status: str         # "sufficient", "partial", "none"
     extracted_entities: List[str]
+    target_files: List[str]
     retrieved_docs: List[Dict[str, Any]]
     is_relevant: bool
     retry_count: int
@@ -14,5 +17,7 @@ class CodeRAGState(TypedDict, total=False):
     sources: List[Dict[str, Any]]
     trace_steps: List[str]
     user_code_snippet: Optional[Dict[str, Any]]
+    export_info: Optional[Dict[str, Any]]
+    export_session: Optional[Dict[str, Any]]
     conversation_id: Optional[str]
     turn_id: Optional[str]

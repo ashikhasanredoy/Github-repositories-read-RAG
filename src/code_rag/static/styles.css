@@ -1310,8 +1310,11 @@ html, body {
     margin-bottom: 6px;
 }
 
-/* Inline code (only when NOT inside a pre block) */
+/* Inline code (only when NOT inside a pre block) - Dark Mode */
 .msg-row.bot .msg-bubble :not(pre) > code,
+.msg-row.user .msg-bubble :not(pre) > code,
+.guide-modal-card :not(pre) > code,
+.markdown-body :not(pre) > code,
 :not(pre) > code {
     background: rgba(255, 255, 255, 0.08) !important;
     color: #e2e8f0 !important;
@@ -1320,6 +1323,20 @@ html, body {
     font-family: 'JetBrains Mono', Consolas, monospace !important;
     font-size: 0.85em !important;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    font-weight: 500 !important;
+}
+
+/* Day Mode / Light Mode High-Contrast Styling for Inline Code, File Names & Folder Paths */
+[data-theme="light"] .msg-row.bot .msg-bubble :not(pre) > code,
+[data-theme="light"] .msg-row.user .msg-bubble :not(pre) > code,
+[data-theme="light"] .guide-modal-card :not(pre) > code,
+[data-theme="light"] .markdown-body :not(pre) > code,
+[data-theme="light"] :not(pre) > code {
+    background: #E8EEF5 !important;
+    color: #0F172A !important;
+    border: 1px solid #CBD5E1 !important;
+    font-weight: 600 !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* Ensure code blocks and anything inside pre NEVER has inline code box styles */
@@ -2259,6 +2276,197 @@ pre[class*="language-"] .token {
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid var(--card-border);
     background: var(--bg-surface-elevated);
+}
+
+/* Guide Toolbar (Search & Category Tabs) */
+.guide-toolbar {
+    padding: 0.85rem 1.5rem;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--card-border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.guide-search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.guide-search-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.guide-search-input {
+    width: 100%;
+    height: 38px;
+    padding: 0 34px 0 36px;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.825rem;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.guide-search-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+.guide-search-clear {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 4px;
+}
+
+.guide-search-clear:hover {
+    color: var(--text-primary);
+}
+
+.guide-nav-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+
+.guide-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    font-size: 0.775rem;
+    font-weight: 600;
+    font-family: inherit;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.18s ease;
+}
+
+.guide-tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--card-hover);
+    border-color: var(--primary-color);
+}
+
+.guide-tab-btn.active {
+    background: var(--primary-color);
+    color: #ffffff;
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px var(--primary-glow);
+}
+
+/* Guide Cards & Prompt Try-It Elements */
+.guide-card-highlight {
+    border-color: rgba(99, 102, 241, 0.35);
+    background: rgba(99, 102, 241, 0.04);
+}
+
+.guide-prompts-container {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--card-border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.prompts-heading {
+    font-size: 0.725rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--primary-color);
+}
+
+.guide-prompt-pills {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.guide-prompt-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    padding: 0.45rem 0.65rem;
+    transition: border-color 0.18s ease;
+}
+
+.guide-prompt-item:hover {
+    border-color: rgba(99, 102, 241, 0.35);
+}
+
+.guide-prompt-item code {
+    font-size: 0.8rem !important;
+    word-break: break-word;
+}
+
+.btn-try-prompt {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.725rem;
+    font-weight: 600;
+    font-family: inherit;
+    background: var(--primary-color);
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.18s ease;
+}
+
+.btn-try-prompt:hover {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px var(--primary-glow);
+}
+
+.btn-try-prompt:active {
+    transform: scale(0.96);
+}
+
+.guide-footer-hint {
+    font-size: 0.775rem;
+    color: var(--text-muted);
+    margin-right: auto;
+}
+
+.guide-empty-search {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
 }
 
 .guide-modal-header-left {

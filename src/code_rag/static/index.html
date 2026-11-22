@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="/static/styles.css?v=32.0">
+    <link rel="stylesheet" href="/static/styles.css?v=34.0">
 </head>
 <body>
     <div class="app-container">
@@ -289,8 +289,8 @@
                         </svg>
                     </div>
                     <div>
-                        <h2 class="guide-modal-title">GitHub Code RAG — User Guide & Architecture</h2>
-                        <span class="guide-modal-subtitle">How the intelligent codebase analysis engine works</span>
+                        <h2 class="guide-modal-title">Code RAG Assistant — User Guide & Architecture</h2>
+                        <span class="guide-modal-subtitle">Interactive guidelines, prompt templates, and system architecture</span>
                     </div>
                 </div>
                 <button type="button" class="custom-modal-close" id="guideModalCloseBtn" aria-label="Close">
@@ -301,10 +301,212 @@
                 </button>
             </div>
 
-            <div class="guide-modal-content">
-                <div class="guide-section">
+            <!-- Guide Toolbar: Search & Category Tabs -->
+            <div class="guide-toolbar">
+                <div class="guide-search-wrapper">
+                    <svg class="guide-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" id="guideSearchInput" class="guide-search-input" placeholder="Search guidelines, prompt examples, or features..." autocomplete="off">
+                    <button type="button" id="guideSearchClearBtn" class="guide-search-clear" style="display: none;" title="Clear search">&times;</button>
+                </div>
+                <div class="guide-nav-tabs">
+                    <button type="button" class="guide-tab-btn active" data-guide-tab="all">All Topics</button>
+                    <button type="button" class="guide-tab-btn" data-guide-tab="prompts">Prompt Guide & Try-It</button>
+                    <button type="button" class="guide-tab-btn" data-guide-tab="export">Code Export Mode</button>
+                    <button type="button" class="guide-tab-btn" data-guide-tab="architecture">Architecture & RAG</button>
+                    <button type="button" class="guide-tab-btn" data-guide-tab="shortcuts">Shortcuts</button>
+                </div>
+            </div>
+
+            <div class="guide-modal-content" id="guideModalContent">
+                <!-- 1. Complete Repository Code Export Mode -->
+                <div class="guide-section" data-guide-cat="export prompts">
                     <h3 class="guide-section-title">
                         <span class="guide-step-tag">1</span>
+                        Complete Repository Code Export Mode
+                    </h3>
+                    <div class="guide-card guide-card-highlight">
+                        <h4>Sequential Whole-Codebase Output</h4>
+                        <p>Exports all eligible source files in the indexed repository, one by one, following the exact depth-first GitHub directory hierarchy. First displays the directory tree, followed by each file in its own complete, untruncated code block. Media files (images, audio, video) are strictly excluded and sensitive secrets are sanitized.</p>
+                        
+                        <div class="guide-prompts-container">
+                            <span class="prompts-heading">Interactive Prompt Examples (Click to Try):</span>
+                            <div class="guide-prompt-pills">
+                                <div class="guide-prompt-item">
+                                    <code>Give me all the code one by one.</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Give me all the code one by one.">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>First show the folder structure, then provide all code.</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="First show the folder structure, then provide all code.">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Show me the entire project code.</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Show me the entire project code.">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Amake sob code ek ek kore dao.</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Amake sob code ek ek kore dao.">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Give me only the README and PDF files.</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Give me only the README and PDF files.">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Continue the remaining code.</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Continue the remaining code.">Try Prompt</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Full Source File Retrieval -->
+                <div class="guide-section" data-guide-cat="prompts">
+                    <h3 class="guide-section-title">
+                        <span class="guide-step-tag">2</span>
+                        Full File Retrieval with Copy & Download
+                    </h3>
+                    <div class="guide-card">
+                        <h4>100% Complete Source Code Retrieval</h4>
+                        <p>Ask for any specific file (e.g. <code>main.py</code>, <code>retriever.py</code>). The system reads the genuine file from disk and outputs the full code from line 1 to the end with dedicated Copy and Download buttons.</p>
+                        
+                        <div class="guide-prompts-container">
+                            <span class="prompts-heading">Interactive Prompt Examples:</span>
+                            <div class="guide-prompt-pills">
+                                <div class="guide-prompt-item">
+                                    <code>Give me main.py</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Give me main.py">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Show full file retriever.py</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Show full file retriever.py">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Show schemas.py with explanation</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Show schemas.py with explanation">Try Prompt</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Line-by-Line Code Explanation -->
+                <div class="guide-section" data-guide-cat="prompts">
+                    <h3 class="guide-section-title">
+                        <span class="guide-step-tag">3</span>
+                        On-Demand Line-by-Line Code Explanation
+                    </h3>
+                    <div class="guide-card">
+                        <h4>Deep Line Breakdown & Execution Traces</h4>
+                        <p>Request line-by-line breakdown for any repository file or paste a raw code snippet directly. Provides numbered lines, syntax mechanisms, variable mutations, step-by-step logic traces, and time/space complexity notation (\(O(...)\)).</p>
+                        
+                        <div class="guide-prompts-container">
+                            <span class="prompts-heading">Interactive Prompt Examples:</span>
+                            <div class="guide-prompt-pills">
+                                <div class="guide-prompt-item">
+                                    <code>Explain main.py line by line</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Explain main.py line by line">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Break down lines 1-40 of graph.py</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Break down lines 1-40 of graph.py">Try Prompt</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Repository & Architecture Structure -->
+                <div class="guide-section" data-guide-cat="architecture prompts">
+                    <h3 class="guide-section-title">
+                        <span class="guide-step-tag">4</span>
+                        GitHub-Style Repository & Directory Trees
+                    </h3>
+                    <div class="guide-card">
+                        <h4>Directory Trees & Architectural Overviews</h4>
+                        <p>Generates an accurate directory tree formatted with GitHub tree connectors (<code>├──</code>, <code>└──</code>, <code>│</code>) and details the responsibilities and architecture of each module.</p>
+                        
+                        <div class="guide-prompts-container">
+                            <span class="prompts-heading">Interactive Prompt Examples:</span>
+                            <div class="guide-prompt-pills">
+                                <div class="guide-prompt-item">
+                                    <code>Show repository structure</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Show repository structure">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Explain project architecture</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Explain project architecture">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Show folder structure of src/</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Show folder structure of src/">Try Prompt</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. General Programming Questions -->
+                <div class="guide-section" data-guide-cat="architecture prompts">
+                    <h3 class="guide-section-title">
+                        <span class="guide-step-tag">5</span>
+                        General Software Engineering & Theory Q&A
+                    </h3>
+                    <div class="guide-card">
+                        <h4>Programming Knowledge Without Repository Fallback</h4>
+                        <p>Ask conceptual questions about software engineering, data structures, algorithms, or frameworks (e.g. FastAPI, React, Docker). The system identifies these as general programming queries and answers directly using deep engineering knowledge.</p>
+                        
+                        <div class="guide-prompts-container">
+                            <span class="prompts-heading">Interactive Prompt Examples:</span>
+                            <div class="guide-prompt-pills">
+                                <div class="guide-prompt-item">
+                                    <code>What is a binary search tree in Python?</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="What is a binary search tree in Python?">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Explain FastAPI dependency injection</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Explain FastAPI dependency injection">Try Prompt</button>
+                                </div>
+                                <div class="guide-prompt-item">
+                                    <code>Difference between REST and GraphQL</code>
+                                    <button type="button" class="btn-try-prompt" data-prompt="Difference between REST and GraphQL">Try Prompt</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. Evidence Validation & Anti-Hallucination -->
+                <div class="guide-section" data-guide-cat="architecture">
+                    <h3 class="guide-section-title">
+                        <span class="guide-step-tag">6</span>
+                        Zero-Hallucination & Evidence Validation
+                    </h3>
+                    <div class="guide-card">
+                        <h4>Strict Verification Before Answering</h4>
+                        <p>When asking about repository code, the system validates evidence across ChromaDB, BM25Plus, and disk file inspection. If a function or file does not exist, the AI never fabricates imaginary code or fake citations. Instead, it emits the professional fallback response.</p>
+                    </div>
+                </div>
+
+                <!-- 7. Persistent SQLite3 Chat History -->
+                <div class="guide-section" data-guide-cat="architecture">
+                    <h3 class="guide-section-title">
+                        <span class="guide-step-tag">7</span>
+                        Persistent Chat History & Cascading Turn Deletion
+                    </h3>
+                    <div class="guide-card">
+                        <h4>Permanent Storage in SQLite3 (data/chat_history.db)</h4>
+                        <p>All conversations and turns are permanently stored in SQLite. Deleting an individual question automatically deletes its paired AI response from both the database and the UI via cascading foreign keys.</p>
+                    </div>
+                </div>
+
+                <!-- 8. End-to-End System Architecture -->
+                <div class="guide-section" data-guide-cat="architecture">
+                    <h3 class="guide-section-title">
+                        <span class="guide-step-tag">8</span>
                         End-to-End Architecture & Workflow
                     </h3>
                     <div class="guide-grid">
@@ -318,7 +520,7 @@
                         </div>
                         <div class="guide-card">
                             <h4>LangGraph Agent Routing</h4>
-                            <p>A state-machine agent classifies user intent into Full File Retrieval, Line-by-Line Code Explanation, Repository Architecture Tree, or Codebase Q&A.</p>
+                            <p>A state-machine agent classifies user intent into Full File Retrieval, Line-by-Line Code Explanation, Repository Architecture Tree, Code Export, or Codebase Q&A.</p>
                         </div>
                         <div class="guide-card">
                             <h4>Local LLM (Ollama) & SSE</h4>
@@ -327,37 +529,14 @@
                     </div>
                 </div>
 
-                <div class="guide-section">
+                <!-- 9. Keyboard Shortcuts -->
+                <div class="guide-section" data-guide-cat="shortcuts">
                     <h3 class="guide-section-title">
-                        <span class="guide-step-tag">2</span>
-                        Core Features & Prompt Guidelines
-                    </h3>
-                    <div class="guide-features-list">
-                        <div class="guide-feature-item">
-                            <strong>Complete Source Code Retrieval:</strong>
-                            <p>Ask <em>"Give me main.py"</em> or <em>"Show full file retriever.py"</em>. Returns original code with one-click Copy and Download buttons without unrequested explanations.</p>
-                        </div>
-                        <div class="guide-feature-item">
-                            <strong>On-Demand Line-by-Line Code Explanation:</strong>
-                            <p>Ask <em>"Explain main.py line by line"</em> or <em>"Explain lines 50-100 of graph.py"</em>. Provides sequentially numbered lines, syntax breakdown, purpose, variable roles, and project context.</p>
-                        </div>
-                        <div class="guide-feature-item">
-                            <strong>Repository & File Structure:</strong>
-                            <p>Ask <em>"Show repository structure"</em>, <em>"file structure"</em>, or <em>"explain project architecture"</em> to see the codebase directory tree in a clean GitHub format.</p>
-                        </div>
-                        <div class="guide-feature-item">
-                            <strong>Persistent SQLite3 Chat History:</strong>
-                            <p>Conversations and turns are permanently stored in <code>data/chat_history.db</code>. Deleting a question automatically deletes its AI answer via cascading turn deletion.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="guide-section">
-                    <h3 class="guide-section-title">
-                        <span class="guide-step-tag">3</span>
-                        Shortcuts & Productivity Tips
+                        <span class="guide-step-tag">9</span>
+                        Keyboard Shortcuts & Productivity
                     </h3>
                     <div class="guide-shortcuts-grid">
+                        <div class="guide-shortcut-row"><kbd>?</kbd> / <kbd>F1</kbd> <span>Open This Guide Anytime</span></div>
                         <div class="guide-shortcut-row"><kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>B</kbd> <span>Toggle Sidebar</span></div>
                         <div class="guide-shortcut-row"><kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>N</kbd> <span>Start New Chat</span></div>
                         <div class="guide-shortcut-row"><kbd>Enter</kbd> <span>Send Query</span></div>
@@ -365,9 +544,19 @@
                         <div class="guide-shortcut-row"><kbd>Esc</kbd> <span>Close Modals & Dialogs</span></div>
                     </div>
                 </div>
+
+                <div id="guideEmptySearch" class="guide-empty-search" style="display: none;">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <p>No guidelines or prompts match your search.</p>
+                    <button type="button" class="btn btn-secondary btn-sm" id="guideResetSearchBtn">Clear Filter</button>
+                </div>
             </div>
 
             <div class="guide-modal-footer">
+                <span class="guide-footer-hint">Tip: Click <strong>Try Prompt</strong> on any example above to immediately test it in chat.</span>
                 <button type="button" class="btn-modal btn-modal-confirm" id="guideModalGotItBtn">Got It</button>
             </div>
         </div>
@@ -384,6 +573,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
-    <script src="/static/app.js?v=37.0"></script>
+    <script src="/static/app.js?v=38.0"></script>
 </body>
 </html>
