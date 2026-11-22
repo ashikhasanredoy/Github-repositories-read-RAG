@@ -5,26 +5,133 @@ from src.code_rag.config import settings
 from src.code_rag.core.models import CodeChunk
 from src.code_rag.core.parser import CodeParser
 
-def generate_ascii_tree(relative_paths: List[str]) -> str:
+def generate_ascii_tree(relative_paths: List[str], root_name: str = "") -> str:
     tree: dict = {}
     for path in sorted(relative_paths):
         parts = Path(path).parts
         curr = tree
-        for part in parts:
-            curr = curr.setdefault(part, {})
+        for i, part in enumerate(parts):
+            if part not in curr:
+                curr[part] = {"is_dir": (i < len(parts) - 1), "children": {}}
+            elif i < len(parts) - 1:
+                curr[part]["is_dir"] = True
+            curr = curr[part]["children"]
 
     lines: List[str] = []
+    if root_name:
+        lines.append(root_name.rstrip("/") + "/")
+
     def _render(node: dict, prefix: str = ""):
-        keys = sorted(node.keys(), key=lambda k: (len(node[k]) > 0, k.lower()))
-        for idx, key in enumerate(keys):
-            is_last = (idx == len(keys) - 1)
+        # Sort directories first, then files alphabetically
+        items = list(node.items())
+        dirs_items = sorted([item for item in items if item[1]["is_dir"]], key=lambda x: x[0].lower())
+        files_items = sorted([item for item in items if not item[1]["is_dir"]], key=lambda x: x[0].lower())
+        sorted_items = dirs_items + files_items
+
+        for idx, (name, data) in enumerate(sorted_items):
+            is_last = (idx == len(sorted_items) - 1)
             connector = "└── " if is_last else "├── "
-            lines.append(f"{prefix}{connector}{key}")
-            child_prefix = prefix + ("    " if is_last else "│   ")
-            _render(node[key], child_prefix)
+            display_name = f"{name}/" if data["is_dir"] else name
+            lines.append(f"{prefix}{connector}{display_name}")
+            if data["is_dir"]:
+                child_prefix = prefix + ("    " if is_last else "│   ")
+                _render(data["children"], child_prefix)
 
     _render(tree)
     return "\n".join(lines)
+
+
+def generate_github_style_tree(
+    repo_dir: Path,
+    root_name: str = "",
+    subfolder: str = "",
+    filter_exts: Optional[List[str]] = None,
+    include_hidden: bool = False
+) -> str:
+    import os
+
+    target_dir = repo_dir
+    display_root = root_name or repo_dir.name
+    if subfolder:
+        clean_sub = subfolder.strip("/")
+        target_dir = repo_dir / clean_sub
+        display_root = f"{display_root}/{clean_sub}"
+
+    display_root = display_root.rstrip("/") + "/"
+    if not target_dir.exists():
+        return f"```text\n{display_root}\n(directory not found)\n```"
+
+    filter_exts_norm = [e.lower() if e.startswith(".") else f".{e.lower()}" for e in filter_exts] if filter_exts else None
+
+    tree_nodes: dict = {}
+
+    for root, dirs, files in os.walk(target_dir):
+        rel_root = os.path.relpath(root, target_dir)
+        if rel_root == ".":
+            rel_root = ""
+
+        valid_dirs = []
+        for d in dirs:
+            if d.startswith(".") and not include_hidden:
+                continue
+            if d == "__pycache__" and not include_hidden and (not subfolder or "__pycache__" not in subfolder):
+                continue
+            valid_dirs.append(d)
+        dirs[:] = valid_dirs
+
+        valid_files = []
+        for f in files:
+            if f.startswith(".") and not include_hidden:
+                continue
+            if filter_exts_norm:
+                if not any(f.lower().endswith(ext) for ext in filter_exts_norm):
+                    continue
+            valid_files.append(f)
+
+        parts = Path(rel_root).parts if rel_root else ()
+        curr = tree_nodes
+        for p in parts:
+            if p not in curr:
+                curr[p] = {"is_dir": True, "children": {}}
+            curr = curr[p]["children"]
+
+        for d in dirs:
+            if d not in curr:
+                curr[d] = {"is_dir": True, "children": {}}
+        for f in valid_files:
+            curr[f] = {"is_dir": False, "children": {}}
+
+    if filter_exts_norm:
+        def prune_empty(node):
+            to_del = []
+            for name, data in node.items():
+                if data["is_dir"]:
+                    prune_empty(data["children"])
+                    if not data["children"]:
+                        to_del.append(name)
+            for name in to_del:
+                del node[name]
+        prune_empty(tree_nodes)
+
+    lines = [display_root]
+
+    def _render(node: dict, prefix: str = ""):
+        items = list(node.items())
+        dirs_items = sorted([item for item in items if item[1]["is_dir"]], key=lambda x: x[0].lower())
+        files_items = sorted([item for item in items if not item[1]["is_dir"]], key=lambda x: x[0].lower())
+        sorted_items = dirs_items + files_items
+
+        for idx, (name, data) in enumerate(sorted_items):
+            is_last = (idx == len(sorted_items) - 1)
+            connector = "└── " if is_last else "├── "
+            display_name = f"{name}/" if data["is_dir"] else name
+            lines.append(f"{prefix}{connector}{display_name}")
+            if data["is_dir"]:
+                child_prefix = prefix + ("    " if is_last else "│   ")
+                _render(data["children"], child_prefix)
+
+    _render(tree_nodes)
+    return "```text\n" + "\n".join(lines) + "\n```"
 
 class CodeChunker:
     LANGUAGE_MAP = {
@@ -55,7 +162,7 @@ class CodeChunker:
             return []
 
         rel_paths = [str(f.relative_to(root)) for f in sorted(files)]
-        ascii_tree = generate_ascii_tree(rel_paths)
+        ascii_tree = generate_ascii_tree(rel_paths, root_name=repo_id)
 
         # 1. Group directories and root files for comprehensive explanation
         dirs_set = sorted({str(Path(p).parts[0]) for p in rel_paths if len(Path(p).parts) > 1})
@@ -76,12 +183,9 @@ class CodeChunker:
         breakdown_str = "\n".join(dir_breakdown)
 
         structure_content = (
-            f"**Repository File Structure:**\n"
-            f"```markdown\n"
+            f"```text\n"
             f"{ascii_tree}\n"
-            f"```\n"
-            f"Note: The above structure is a direct representation of the repository structure as provided in the repository context.\n\n"
-            f"The repository structure is as follows:\n\n"
+            f"```\n\n"
             f"{breakdown_str}"
         )
 

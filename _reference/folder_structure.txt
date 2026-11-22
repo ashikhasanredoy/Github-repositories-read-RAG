@@ -1,0 +1,523 @@
+# Project Structure
+
+```
+git read RAG/
+├── assets
+│   └── pipeline_diagram.jpg
+├── data
+│   ├── bm25_indices
+│   │   ├── Fire-Weather-Index.pkl
+│   │   ├── github-repositories-read-rag.pkl
+│   │   ├── multi-agent-rag-intelligence.pkl
+│   │   └── student-score-prediction.pkl
+│   ├── chroma_db
+│   │   ├── 025630d1-c0f8-43d1-8210-9ca1b6710c4e
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 18d22f20-5ca3-403b-b812-2734e669f46d
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 208d0308-71d8-4538-baf5-96500b287b52
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 247ad45a-ecb9-4a2d-b8cf-34703330a23c
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 325d0530-bb34-482c-be79-e5b555409cef
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 3d8b58fa-63f9-426f-8d64-a346eff699ea
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 4a33b358-3c9b-47fa-be0c-e352da469332
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 569f48f6-c4f5-48e9-9b5d-aa90abb31ea1
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 693e85fb-b196-4c32-b64f-10995d5230f9
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 6e4f76ef-bcbe-4a0a-8718-52a8eec9c5eb
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── 9568d7b9-7459-4fca-9601-21d380250eca
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── abf824f8-b841-4fe7-b00d-50f64fa97ce3
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── b873a43e-4e26-4b3e-bd74-e09c375de0b9
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── bcdaaa5e-74f4-49db-b7ec-d190836bcf96
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── bfeb682a-c3a1-44e0-bfcc-6741eccbee7e
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── caae11e9-1b33-48ee-ab92-a1c3e882a511
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   ├── dcabbffe-c632-4b62-887f-d3a5b50f4f8d
+│   │   │   ├── data_level0.bin
+│   │   │   ├── header.bin
+│   │   │   ├── length.bin
+│   │   │   └── link_lists.bin
+│   │   └── chroma.sqlite3
+│   ├── repos
+│   │   ├── Fire-Weather-Index
+│   │   │   ├── models
+│   │   │   │   ├── linear.pkl
+│   │   │   │   └── scaler.pkl
+│   │   │   ├── notebook
+│   │   │   │   ├── Algerian_forest_fires_dataset_cleaned.csv
+│   │   │   │   ├── Algerian_forest_fires_dataset_UPDATE.csv
+│   │   │   │   ├── linear.pkl
+│   │   │   │   ├── Project deployment.ipynb
+│   │   │   │   └── scaler.pkl
+│   │   │   ├── templates
+│   │   │   │   ├── home.html
+│   │   │   │   └── index.html
+│   │   │   ├── application.py
+│   │   │   ├── README.md
+│   │   │   ├── requirements.txt
+│   │   │   └── tempCodeRunnerFile.py
+│   │   ├── github-repositories-read-rag
+│   │   │   ├── assets
+│   │   │   │   └── pipeline_diagram.jpg
+│   │   │   ├── src
+│   │   │   │   └── code_rag
+│   │   │   │       ├── api
+│   │   │   │       ├── core
+│   │   │   │       ├── rag
+│   │   │   │       ├── services
+│   │   │   │       ├── static
+│   │   │   │       ├── storage
+│   │   │   │       ├── __init__.py
+│   │   │   │       └── config.py
+│   │   │   ├── LICENSE
+│   │   │   ├── README.md
+│   │   │   ├── requirements.txt
+│   │   │   └── run.py
+│   │   ├── multi-agent-rag-intelligence
+│   │   │   ├── app
+│   │   │   │   ├── agents
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── code_agent.py
+│   │   │   │   │   ├── critic_agent.py
+│   │   │   │   │   ├── final_agent.py
+│   │   │   │   │   ├── finance_agent.py
+│   │   │   │   │   ├── general_agent.py
+│   │   │   │   │   ├── product_agent.py
+│   │   │   │   │   ├── rag_agent.py
+│   │   │   │   │   ├── supervisor.py
+│   │   │   │   │   └── web_agent.py
+│   │   │   │   ├── api
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── chat.py
+│   │   │   │   │   ├── documents.py
+│   │   │   │   │   ├── health.py
+│   │   │   │   │   └── memory.py
+│   │   │   │   ├── config
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   └── settings.py
+│   │   │   │   ├── database
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   └── postgres.py
+│   │   │   │   ├── graph
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── state.py
+│   │   │   │   │   └── workflow.py
+│   │   │   │   ├── memory
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── buffer.py
+│   │   │   │   │   ├── extractor.py
+│   │   │   │   │   ├── models.py
+│   │   │   │   │   ├── pg_store.py
+│   │   │   │   │   └── store.py
+│   │   │   │   ├── models
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   └── schemas.py
+│   │   │   │   ├── rag
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── chunking.py
+│   │   │   │   │   ├── evidence.py
+│   │   │   │   │   ├── hybrid.py
+│   │   │   │   │   ├── ingestion.py
+│   │   │   │   │   └── loaders.py
+│   │   │   │   ├── services
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── embeddings.py
+│   │   │   │   │   └── llm.py
+│   │   │   │   ├── tools
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── code_tool.py
+│   │   │   │   │   ├── finance_tool.py
+│   │   │   │   │   ├── retrieval_tool.py
+│   │   │   │   │   └── search_tool.py
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   └── logging.py
+│   │   │   │   ├── dependencies.py
+│   │   │   │   └── main.py
+│   │   │   ├── assets
+│   │   │   │   └── multiagent_pipeline_sketch.jpg
+│   │   │   ├── data
+│   │   │   │   ├── chat_history.json
+│   │   │   │   ├── long_term_memory.json
+│   │   │   │   └── vector_store.json
+│   │   │   ├── documents
+│   │   │   │   ├── Adaptive Image Enhancement Research Proposal.pdf
+│   │   │   │   └── enterprise_privacy_policy.txt
+│   │   │   ├── frontend
+│   │   │   │   ├── css
+│   │   │   │   │   └── styles.css
+│   │   │   │   ├── js
+│   │   │   │   │   └── app.js
+│   │   │   │   └── index.html
+│   │   │   ├── tests
+│   │   │   │   ├── test_api_integration.py
+│   │   │   │   ├── test_master_routing_and_rag.py
+│   │   │   │   ├── test_memory_and_tools.py
+│   │   │   │   ├── test_scenarios_a_to_l.py
+│   │   │   │   └── test_tdd_suite.py
+│   │   │   ├── README.md
+│   │   │   └── requirements.txt
+│   │   ├── pet-analysis-wizard
+│   │   │   ├── auth_service_node
+│   │   │   │   ├── config
+│   │   │   │   │   └── db.config.js
+│   │   │   │   ├── public
+│   │   │   │   │   └── index.html
+│   │   │   │   ├── routes
+│   │   │   │   │   └── auth.router.js
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── mailer.util.js
+│   │   │   │   │   └── security.util.js
+│   │   │   │   ├── auth_service.db
+│   │   │   │   ├── index.js
+│   │   │   │   └── package.json
+│   │   │   ├── backend
+│   │   │   │   ├── apps
+│   │   │   │   │   ├── accounts
+│   │   │   │   │   ├── adoptions
+│   │   │   │   │   ├── appointments
+│   │   │   │   │   ├── bookings
+│   │   │   │   │   ├── bootcamps
+│   │   │   │   │   ├── chat
+│   │   │   │   │   ├── complaints
+│   │   │   │   │   ├── core
+│   │   │   │   │   ├── group_portal
+│   │   │   │   │   ├── notifications
+│   │   │   │   │   ├── payments
+│   │   │   │   │   ├── pets
+│   │   │   │   │   ├── products
+│   │   │   │   │   ├── promotions
+│   │   │   │   │   ├── reviews
+│   │   │   │   │   ├── shelters
+│   │   │   │   │   ├── veterinary
+│   │   │   │   │   └── __init__.py
+│   │   │   │   ├── config
+│   │   │   │   │   ├── settings
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── admin_broadcast.py
+│   │   │   │   │   ├── admin_bulk_actions.py
+│   │   │   │   │   ├── admin_complaint_reply.py
+│   │   │   │   │   ├── admin_sections.py
+│   │   │   │   │   ├── admin_views.py
+│   │   │   │   │   ├── admin_visitors.py
+│   │   │   │   │   ├── asgi.py
+│   │   │   │   │   ├── urls.py
+│   │   │   │   │   └── wsgi.py
+│   │   │   │   ├── media
+│   │   │   │   │   ├── about_showcase
+│   │   │   │   │   ├── avatars
+│   │   │   │   │   ├── chat_images
+│   │   │   │   │   ├── complaints
+│   │   │   │   │   ├── emergency_photos
+│   │   │   │   │   ├── health_blogs
+│   │   │   │   │   ├── pets
+│   │   │   │   │   ├── portal_profiles
+│   │   │   │   │   ├── products
+│   │   │   │   │   └── shelters
+│   │   │   │   ├── scripts
+│   │   │   │   │   ├── backup.sh
+│   │   │   │   │   └── migrate_sqlite_to_postgres.py
+│   │   │   │   ├── seed demo
+│   │   │   │   │   ├── README.md
+│   │   │   │   │   ├── seed_adoptions_2000.py
+│   │   │   │   │   ├── seed_all.py
+│   │   │   │   │   ├── seed_blog_comments.py
+│   │   │   │   │   ├── seed_bootcamps_150.py
+│   │   │   │   │   ├── seed_bootcamps_aug_oct_100.py
+│   │   │   │   │   ├── seed_complaints_150.py
+│   │   │   │   │   ├── seed_consultations_250.py
+│   │   │   │   │   ├── seed_data.py
+│   │   │   │   │   ├── seed_demo_large.py
+│   │   │   │   │   ├── seed_doctors_150.py
+│   │   │   │   │   ├── seed_health_blogs_100.py
+│   │   │   │   │   ├── seed_payments_1500.py
+│   │   │   │   │   ├── seed_pets_large.py
+│   │   │   │   │   ├── seed_product_photos.py
+│   │   │   │   │   ├── seed_reviews_large.py
+│   │   │   │   │   ├── seed_shelter_photos.py
+│   │   │   │   │   ├── seed_tracking_ids.py
+│   │   │   │   │   └── seed_vaccinations_large.py
+│   │   │   │   ├── static
+│   │   │   │   │   └── admin
+│   │   │   │   ├── staticfiles
+│   │   │   │   │   ├── admin
+│   │   │   │   │   └── rest_framework
+│   │   │   │   ├── templates
+│   │   │   │   │   ├── admin
+│   │   │   │   │   ├── group_portal
+│   │   │   │   │   └── registration
+│   │   │   │   ├── tests
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── run_all_audits.py
+│   │   │   │   │   ├── test_admin_sections_and_search.py
+│   │   │   │   │   ├── test_ai_chatbot_and_rag.py
+│   │   │   │   │   ├── test_all_delete_buttons.py
+│   │   │   │   │   ├── test_api_endpoints.py
+│   │   │   │   │   ├── test_e2e_user_flows.py
+│   │   │   │   │   ├── test_models_and_db.py
+│   │   │   │   │   ├── test_performance_and_queries.py
+│   │   │   │   │   └── test_rbac_and_security.py
+│   │   │   │   ├── utils
+│   │   │   │   │   ├── realtime.py
+│   │   │   │   │   └── validators.py
+│   │   │   │   ├── manage.py
+│   │   │   │   ├── requirements.txt
+│   │   │   │   └── seed_data.py
+│   │   │   ├── frontend
+│   │   │   │   ├── public
+│   │   │   │   │   ├── animations
+│   │   │   │   │   ├── assets
+│   │   │   │   │   ├── favicon.svg
+│   │   │   │   │   ├── icons.svg
+│   │   │   │   │   └── paw.svg
+│   │   │   │   ├── src
+│   │   │   │   │   ├── api
+│   │   │   │   │   ├── assets
+│   │   │   │   │   ├── components
+│   │   │   │   │   ├── pages
+│   │   │   │   │   ├── routes
+│   │   │   │   │   ├── store
+│   │   │   │   │   ├── styles
+│   │   │   │   │   ├── utils
+│   │   │   │   │   ├── App.css
+│   │   │   │   │   ├── App.jsx
+│   │   │   │   │   ├── index.css
+│   │   │   │   │   └── main.jsx
+│   │   │   │   ├── eslint.config.js
+│   │   │   │   ├── index.html
+│   │   │   │   ├── package.json
+│   │   │   │   ├── README.md
+│   │   │   │   └── vite.config.js
+│   │   │   ├── seed demo
+│   │   │   │   ├── README.md
+│   │   │   │   ├── seed_adoptions_2000.py
+│   │   │   │   ├── seed_all.py
+│   │   │   │   ├── seed_blog_comments.py
+│   │   │   │   ├── seed_bootcamps_150.py
+│   │   │   │   ├── seed_bootcamps_aug_oct_100.py
+│   │   │   │   ├── seed_complaints_150.py
+│   │   │   │   ├── seed_consultations_250.py
+│   │   │   │   ├── seed_data.py
+│   │   │   │   ├── seed_demo_large.py
+│   │   │   │   ├── seed_doctors_150.py
+│   │   │   │   ├── seed_health_blogs_100.py
+│   │   │   │   ├── seed_payments_1500.py
+│   │   │   │   ├── seed_pets_large.py
+│   │   │   │   ├── seed_product_photos.py
+│   │   │   │   ├── seed_reviews_large.py
+│   │   │   │   ├── seed_shelter_photos.py
+│   │   │   │   ├── seed_tracking_ids.py
+│   │   │   │   └── seed_vaccinations_large.py
+│   │   │   ├── install.sh
+│   │   │   ├── package.json
+│   │   │   ├── PROJECT_STATUS.md
+│   │   │   ├── README.md
+│   │   │   └── start.sh
+│   │   ├── student-score-prediction
+│   │   │   ├── artifacts
+│   │   │   │   ├── data.csv
+│   │   │   │   ├── model.pkl
+│   │   │   │   ├── preprocessor.pkl
+│   │   │   │   ├── test.csv
+│   │   │   │   └── train.csv
+│   │   │   ├── catboost_info
+│   │   │   │   ├── learn
+│   │   │   │   │   └── events.out.tfevents
+│   │   │   │   ├── catboost_training.json
+│   │   │   │   ├── learn_error.tsv
+│   │   │   │   └── time_left.tsv
+│   │   │   ├── notebook
+│   │   │   │   ├── catboost_info
+│   │   │   │   │   ├── learn
+│   │   │   │   │   ├── catboost_training.json
+│   │   │   │   │   ├── learn_error.tsv
+│   │   │   │   │   └── time_left.tsv
+│   │   │   │   ├── data
+│   │   │   │   │   └── Students.csv
+│   │   │   │   ├── EDA STUDENT PERFORMANCE.ipynb
+│   │   │   │   └── MODEL TRANING.ipynb
+│   │   │   ├── src
+│   │   │   │   ├── components
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── data_ingestion.py
+│   │   │   │   │   ├── data_transformation.py
+│   │   │   │   │   └── model_trainer.py
+│   │   │   │   ├── pipeline
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── predict_pipeline.py
+│   │   │   │   │   └── train_pipeline.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── exception.py
+│   │   │   │   ├── logger.py
+│   │   │   │   └── utils.py
+│   │   │   ├── templates
+│   │   │   │   ├── home.html
+│   │   │   │   └── index.html
+│   │   │   ├── app.py
+│   │   │   ├── README.md
+│   │   │   ├── requirements.txt
+│   │   │   └── setup.py
+│   │   └── student-score-prediction-
+│   │       ├── artifacts
+│   │       │   ├── data.csv
+│   │       │   ├── model.pkl
+│   │       │   ├── preprocessor.pkl
+│   │       │   ├── test.csv
+│   │       │   └── train.csv
+│   │       ├── catboost_info
+│   │       │   ├── learn
+│   │       │   │   └── events.out.tfevents
+│   │       │   ├── catboost_training.json
+│   │       │   ├── learn_error.tsv
+│   │       │   └── time_left.tsv
+│   │       ├── notebook
+│   │       │   ├── catboost_info
+│   │       │   │   ├── learn
+│   │       │   │   ├── catboost_training.json
+│   │       │   │   ├── learn_error.tsv
+│   │       │   │   └── time_left.tsv
+│   │       │   ├── data
+│   │       │   │   └── Students.csv
+│   │       │   ├── EDA STUDENT PERFORMANCE.ipynb
+│   │       │   └── MODEL TRANING.ipynb
+│   │       ├── src
+│   │       │   ├── components
+│   │       │   │   ├── __init__.py
+│   │       │   │   ├── data_ingestion.py
+│   │       │   │   ├── data_transformation.py
+│   │       │   │   └── model_trainer.py
+│   │       │   ├── pipeline
+│   │       │   │   ├── __init__.py
+│   │       │   │   ├── predict_pipeline.py
+│   │       │   │   └── train_pipeline.py
+│   │       │   ├── __init__.py
+│   │       │   ├── exception.py
+│   │       │   ├── logger.py
+│   │       │   └── utils.py
+│   │       ├── templates
+│   │       │   ├── home.html
+│   │       │   └── index.html
+│   │       ├── app.py
+│   │       ├── README.md
+│   │       ├── requirements.txt
+│   │       └── setup.py
+│   └── repo_paths.json
+├── src
+│   └── code_rag
+│       ├── __pycache__
+│       │   ├── __init__.cpython-39.pyc
+│       │   └── config.cpython-39.pyc
+│       ├── api
+│       │   ├── __pycache__
+│       │   │   ├── __init__.cpython-39.pyc
+│       │   │   ├── main.cpython-39.pyc
+│       │   │   └── schemas.cpython-39.pyc
+│       │   ├── __init__.py
+│       │   ├── main.py
+│       │   └── schemas.py
+│       ├── core
+│       │   ├── __pycache__
+│       │   │   ├── __init__.cpython-39.pyc
+│       │   │   ├── chunker.cpython-39.pyc
+│       │   │   ├── cloner.cpython-39.pyc
+│       │   │   ├── models.cpython-39.pyc
+│       │   │   └── parser.cpython-39.pyc
+│       │   ├── __init__.py
+│       │   ├── chunker.py
+│       │   ├── cloner.py
+│       │   ├── models.py
+│       │   └── parser.py
+│       ├── rag
+│       │   ├── __pycache__
+│       │   │   ├── __init__.cpython-39.pyc
+│       │   │   ├── graph.cpython-39.pyc
+│       │   │   ├── retriever.cpython-39.pyc
+│       │   │   └── state.cpython-39.pyc
+│       │   ├── __init__.py
+│       │   ├── graph.py
+│       │   ├── retriever.py
+│       │   └── state.py
+│       ├── services
+│       │   ├── __pycache__
+│       │   │   ├── __init__.cpython-39.pyc
+│       │   │   └── ollama.cpython-39.pyc
+│       │   ├── __init__.py
+│       │   └── ollama.py
+│       ├── static
+│       │   ├── app.js
+│       │   ├── index.html
+│       │   └── styles.css
+│       ├── storage
+│       │   ├── __pycache__
+│       │   │   ├── __init__.cpython-39.pyc
+│       │   │   ├── bm25_store.cpython-39.pyc
+│       │   │   └── vector_store.cpython-39.pyc
+│       │   ├── __init__.py
+│       │   ├── bm25_store.py
+│       │   └── vector_store.py
+│       ├── __init__.py
+│       └── config.py
+├── LICENSE
+├── README.md
+├── requirements.txt
+└── run.py
+```

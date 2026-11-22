@@ -25,6 +25,141 @@ LANGUAGE_MAP = {
     ".vue": "vue", ".svelte": "svelte", ".proto": "protobuf"
 }
 
+def detect_structure_intent(query: str) -> Optional[Dict[str, Any]]:
+    q = query.lower().strip()
+
+    # 1. Single file check: if user asks for a specific source file, NOT structure
+    single_file_match = re.search(r"\b([a-zA-Z0-9_\-./]+\.(?:py|js|ts|html|css|json|yaml|yml|md|sql|go|java|c|cpp|h))\b", q)
+    is_asking_file_content = any(phrase in q for phrase in [
+        "give me", "show code", "show the code", "source code of", "get file", "view file",
+        "read file", "open file", "contents of file", "code of", "line by line"
+    ])
+    if single_file_match and is_asking_file_content:
+        return None
+
+    # Check for extension filter
+    filter_exts = []
+    if "python" in q or ".py" in q:
+        filter_exts.append(".py")
+    if "javascript" in q or ".js" in q:
+        filter_exts.append(".js")
+    if "typescript" in q or ".ts" in q:
+        filter_exts.append(".ts")
+    if "html" in q or ".html" in q:
+        filter_exts.append(".html")
+    if "css" in q or ".css" in q:
+        filter_exts.append(".css")
+
+    # Check for specific folder request
+    subfolder = ""
+    folder_match = re.search(r"\b(?:folder|directory|dir|package|module|subdirectories|inside)\s+([a-zA-Z0-9_\-./]+)", q)
+    if folder_match:
+        cand = folder_match.group(1).strip("`\"'").rstrip("/")
+        stopwords_folder = ["this", "the", "a", "my", "project", "repo", "repository", "codebase", "structure", "tree", "hierarchy", "layout", "all", "nested"]
+        if cand not in stopwords_folder:
+            subfolder = cand
+    if not subfolder and "__pycache__" in q:
+        subfolder = "__pycache__"
+    elif not subfolder and "backend" in q and any(w in q for w in ["architecture", "structure", "hierarchy", "tree", "file"]):
+        subfolder = "src/code_rag"
+
+    structure_patterns = [
+        # A. Repo structure
+        r"\brepo(?:sitory)?\s+structure\b",
+        r"\bcodebase\s+structure\b",
+        r"\bproject\s+structure\b",
+        r"\bcomplete\s+repo\s+layout\b",
+        r"\bentire\s+project\s+structure\b",
+        r"\bstructure\s+of\s+this\s+(?:project|repo|repository|codebase)\b",
+        r"\blist\s+all\s+(?:repository\s+)?files\b",
+        r"\brepo(?:sitory)?\s+contents\b",
+        r"\bcodebase\s+overview\b",
+        r"\bsource\s+code\s+organization\b",
+        r"\bhow\s+is\s+this\s+project\s+organized\b",
+        r"\bcomplete\s+directory\s+tree\b",
+        r"\brepository\s+hierarchy\b",
+        r"\bgithub(?:-style)?\s+(?:repository\s+)?structure\b",
+        # B. Folder & directory structure
+        r"\bfolder\s+structure\b",
+        r"\bdirectory\s+structure\b",
+        r"\bdirectory\s+hierarchy\b",
+        r"\blist\s+all\s+(?:folders|directories)\b",
+        r"\bshow\s+all\s+(?:folders|directories)\b",
+        r"\b(?:show|display)\s+nested\s+folders\b",
+        r"\bsubdirectories\b",
+        r"\bfolder\s+tree\b",
+        r"\bfolder\s+layout\b",
+        r"\bwhat\s+folders\s+are\s+inside\b",
+        r"\bcontents\s+of\s+(?:a\s+)?folder\b",
+        r"\bcomplete\s+folder\s+hierarchy\b",
+        r"\bnested\s+directory\s+structure\b",
+        r"\blist\s+files\s+and\s+folders\b",
+        r"\bparent\s+and\s+child\s+directories\b",
+        # C. File structure
+        r"\bfile\s+structure\b",
+        r"\blist\s+project\s+files\b",
+        r"\b(?:show|display|list)\s+all\s+files\b",
+        r"\blist\s+source\s+files\b",
+        r"\b(?:show|list|display)\s+(?:all\s+)?(?:python|javascript|html|css)\s+files\b",
+        r"\bfiles\s+inside\s+a\s+directory\b",
+        r"\bwhat\s+files\s+are\s+in\s+this\s+project\b",
+        r"\bwhich\s+files\s+are\s+inside\b",
+        r"\bfile\s+hierarchy\b",
+        r"\bcomplete\s+file\s+listing\b",
+        r"\bproject\s+file\s+tree\b",
+        r"\bsource\s+file\s+tree\b",
+        # D. Architecture & System organization
+        r"\bproject\s+architecture\b",
+        r"\bsystem\s+architecture\b",
+        r"\bsoftware\s+architecture\b",
+        r"\bapplication\s+architecture\b",
+        r"\bbackend\s+(?:architecture|file\s+hierarchy|structure)\b",
+        r"\bfrontend\s+(?:architecture|file\s+hierarchy|structure)\b",
+        r"\bcode\s+architecture\b",
+        r"\bapplication\s+structure\b",
+        r"\bmodule\s+hierarchy\b",
+        r"\bmodule\s+organization\b",
+        r"\bcomponent\s+structure\b",
+        r"\bcomponent\s+hierarchy\b",
+        r"\bpackage\s+structure\b",
+        r"\bhow\s+modules\s+are\s+organized\b",
+        r"\binternal\s+architecture\b",
+        r"\barchitectural\s+overview\b",
+        r"\brelationship\s+between\s+folders\s+and\s+files\b",
+        r"\bcodebase\s+organization\b",
+        # E. Natural language expressions
+        r"\bhow\s+does\s+the\s+project\s+look\s+internally\b",
+        r"\bwhat\s+does\s+the\s+project\s+contain\b",
+        r"\bwhat\s+is\s+inside\s+the\s+repository\b",
+        r"\bhow\s+are\s+the\s+files\s+arranged\b",
+        r"\bhow\s+is\s+the\s+code\s+organized\b",
+        r"\bproject\s+layout\b",
+        r"\boverview\s+of\s+the\s+directories\b",
+        r"\bcomplete\s+hierarchy\b",
+        r"\bmap\s+out\s+the\s+project\b",
+        r"\bshow\s+me\s+everything\s+inside\s+the\s+project\b",
+        r"\bprint\s+the\s+directory\s+tree\b",
+        r"\bgenerate\s+a\s+tree\s+view\b",
+        r"\bvisualize\s+the\s+project\s+hierarchy\b",
+        r"\bmap\s+the\s+source\s+code\s+organization\b",
+        r"\bwhere\s+are\s+all\s+the\s+modules\s+located\b",
+        r"\btree\s+view\b",
+        r"\bdirectory\s+tree\b"
+    ]
+
+    matched = any(re.search(pat, q) for pat in structure_patterns)
+    if matched or (subfolder and any(w in q for w in ["show", "list", "display", "contents", "what is inside", "tree"])):
+        explanation_keywords = [r"\bexplain\b", r"\boverview\b", r"\bdescribe\b", r"\bwhy\b", r"\bhow\b", r"\bresponsibilit", r"\brelationship\b"]
+        wants_explanation = any(re.search(kw, q) for kw in explanation_keywords)
+        return {
+            "is_structure": True,
+            "subfolder": subfolder,
+            "filter_exts": filter_exts,
+            "wants_explanation": wants_explanation
+        }
+    return None
+
+
 class HybridRetriever:
     def __init__(
         self,
@@ -159,69 +294,49 @@ class HybridRetriever:
         if full_disk_files and (wants_code_or_file or len(target_files) > 0):
             return full_disk_files[:3]
 
-        # Boost file tree overview chunk for structure / tree queries
-        is_structure_query = any(w in q_lower for w in [
-            "file structure", "folder structure", "tree", "directory layout",
-            "project layout", "files in this repo", "project structure", "what files",
-            "give file structure", "show file structure", "show files", "list files", "structure of this repo"
-        ])
+        # Structure / architecture tree requests
+        struct_info = detect_structure_intent(query)
+        if struct_info:
+            repo_dir = self.cloner.get_repo_path(repo_id)
+            if repo_dir and repo_dir.exists():
+                from src.code_rag.core.chunker import generate_github_style_tree
+                include_hidden = bool(struct_info.get("subfolder") and "__pycache__" in struct_info["subfolder"])
+                tree_text = generate_github_style_tree(
+                    repo_dir=repo_dir,
+                    root_name=repo_id,
+                    subfolder=struct_info.get("subfolder", ""),
+                    filter_exts=struct_info.get("filter_exts"),
+                    include_hidden=include_hidden
+                )
+                return [{
+                    "chunk_id": f"{repo_id}_file_tree",
+                    "content": tree_text,
+                    "metadata": {
+                        "rel_path": "REPOSITORY_STRUCTURE.md",
+                        "language": "text",
+                        "symbol_name": "repository_file_tree",
+                        "symbol_type": "overview",
+                        "start_line": 1,
+                        "end_line": 1,
+                        "is_full_file": False,
+                        "is_tree": True,
+                        "wants_explanation": struct_info.get("wants_explanation", False)
+                    },
+                    "rrf_score": 999.0
+                }]
 
-        if is_structure_query:
+            # Fallback to pre-indexed tree chunk if repo_dir not available
             tree_chunks = [
                 item for cid, item in chunk_map.items()
                 if "file_tree" in cid or "repository_structure" in item.get("metadata", {}).get("rel_path", "").lower()
             ]
             if tree_chunks:
-                return tree_chunks[:1]
-
-            # Generate dynamically from disk if not found in chunk map
-            repo_dir = self.cloner.get_repo_path(repo_id)
-            if repo_dir and repo_dir.exists():
-                from src.code_rag.core.parser import CodeParser
-                from src.code_rag.core.chunker import generate_ascii_tree
-                p = CodeParser()
-                files = p.scan_repository(str(repo_dir))
-                if files:
-                    rel_paths = [str(f.relative_to(repo_dir)) for f in sorted(files)]
-                    ascii_tree = generate_ascii_tree(rel_paths)
-                    dirs_set = sorted({str(Path(p_path).parts[0]) for p_path in rel_paths if len(Path(p_path).parts) > 1})
-                    root_files = sorted({p_path for p_path in rel_paths if len(Path(p_path).parts) == 1})
-
-                    dir_breakdown = []
-                    if dirs_set:
-                        dir_breakdown.append("- The repository contains the following directories:")
-                        for d in dirs_set:
-                            sub_count = len([p_path for p_path in rel_paths if p_path.startswith(f"{d}/")])
-                            dir_breakdown.append(f"  - `{d}/`: Contains {sub_count} files.")
-                    if root_files:
-                        dir_breakdown.append("- The repository also contains the following root files:")
-                        for rf in root_files:
-                            dir_breakdown.append(f"  - `{rf}`: Root configuration / entrypoint file.")
-                    breakdown_str = "\n".join(dir_breakdown)
-
-                    tree_content = (
-                        f"**Repository File Structure:**\n"
-                        f"```markdown\n"
-                        f"{ascii_tree}\n"
-                        f"```\n"
-                        f"Note: The above structure is a direct representation of the repository structure as provided in the repository context.\n\n"
-                        f"The repository structure is as follows:\n\n"
-                        f"{breakdown_str}"
-                    )
-                    return [{
-                        "chunk_id": f"{repo_id}_file_tree",
-                        "content": tree_content,
-                        "metadata": {
-                            "rel_path": "REPOSITORY_STRUCTURE.md",
-                            "language": "markdown",
-                            "symbol_name": "repository_file_tree",
-                            "symbol_type": "overview",
-                            "start_line": 1,
-                            "end_line": len(files),
-                            "is_full_file": True
-                        },
-                        "rrf_score": 999.0
-                    }]
+                tc = dict(tree_chunks[0])
+                tc["metadata"] = dict(tc.get("metadata", {}))
+                tc["metadata"]["is_tree"] = True
+                tc["metadata"]["is_full_file"] = False
+                tc["metadata"]["wants_explanation"] = struct_info.get("wants_explanation", False)
+                return [tc]
 
         sorted_ids = sorted(rrf_scores.keys(), key=lambda k: rrf_scores[k], reverse=True)[:top_k]
 
@@ -252,7 +367,7 @@ class HybridRetriever:
             if not found_any:
                 missing = ", ".join(target_files)
                 blocks.append(
-                    f"⚠️ [SYSTEM NOTICE: The user explicitly asked about '{missing}', but '{missing}' DOES NOT EXIST in this repository.\n"
+                    f"[SYSTEM NOTICE: The user explicitly asked about '{missing}', but '{missing}' DOES NOT EXIST in this repository.\n"
                     f"DO NOT attribute code from other files to '{missing}'. State clearly that '{missing}' is not present in the repository.]\n"
                 )
 

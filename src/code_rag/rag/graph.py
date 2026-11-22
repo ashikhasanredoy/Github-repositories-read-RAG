@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 from langgraph.graph import StateGraph, END
 from src.code_rag.config import settings
 from src.code_rag.rag.state import CodeRAGState
-from src.code_rag.rag.retriever import HybridRetriever
+from src.code_rag.rag.retriever import HybridRetriever, detect_structure_intent
 from src.code_rag.services.ollama import OllamaService
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ SYSTEM_PROMPT = """You are an expert AI code assistant and educator analyzing so
 CRITICAL RULES:
 1. LINE-BY-LINE CODE EXPLANATION: When the user provides a code snippet or asks for a line-by-line breakdown, systematically explain every line (or concise logical group of lines) with line numbers, syntax details, variable mutations, logic flow, and execution traces.
 2. SPECIFIC FILE/CODE REQUESTS: When asked to show/explain a repository file, output the 100% COMPLETE, EXACT, UNTRUNCATED CODE inside a fenced code block with appropriate language tag, followed by an in-depth breakdown.
-3. FILE STRUCTURE REQUESTS: Output the ASCII tree inside a ```markdown ... ``` block followed by bulleted descriptions.
+3. REPOSITORY & DIRECTORY STRUCTURE REQUESTS: Output the directory tree inside a ```text ... ``` block using GitHub-style tree format (├──, └──, │) with trailing slashes for folders. Do not invent files or folders. If architecture explanation is requested, explain module responsibilities below the tree.
 4. Base repository answers strictly and accurately on the provided repository context."""
 
 def extract_user_code_from_query(question: str) -> Optional[Dict[str, Any]]:
@@ -98,19 +98,19 @@ User Request: {user_instruction or 'Explain this code line by line in detail.'}
 
 Provide your explanation formatted in clean, professional markdown according to this structure:
 
-### 🎯 Overview & Purpose
+### Overview & Purpose
 A concise high-level summary of what this code does, its main purpose, expected inputs, and output.
 
-### 🔍 Detailed Line-by-Line Breakdown
+### Detailed Line-by-Line Breakdown
 Walk through every line (or concise logical group of lines) in order from Line 1 to Line {len(lines)}:
 - **`Line X`**: `exact line code`
   - **Syntax & Mechanism**: Explain the language constructs, keywords, operators, and functions used.
   - **Role & State**: Explain how variables change, what conditions are evaluated, or what is returned.
 
-### 💡 Step-by-Step Logic Flow & Example Trace
+### Step-by-Step Logic Flow & Example Trace
 Provide a concrete walkthrough with sample input values (e.g. tracing step-by-step state changes).
 
-### ⚡ Complexity & Key Takeaways
+### Complexity & Key Takeaways
 - **Time Complexity**: $O(...)$ with rationale.
 - **Space Complexity**: $O(...)$ with rationale.
 - **Best Practices / Key Insights**: Any edge cases, potential pitfalls, or idiomatic improvements.
@@ -139,6 +139,19 @@ class CodeRAGGraph:
                 "query_intent": "user_code_line_by_line",
                 "extracted_entities": [],
                 "user_code_snippet": code_info,
+                "trace_steps": trace
+            }
+
+        # 2. Check for repository structure or architecture request
+        struct_info = detect_structure_intent(question)
+        if struct_info:
+            sub = struct_info.get("subfolder", "")
+            exts = struct_info.get("filter_exts", [])
+            trace.append(f"Detected repository structure / architecture query (subfolder: '{sub}', filters: {exts})")
+            return {
+                "query_intent": "repository_structure",
+                "extracted_entities": [],
+                "structure_info": struct_info,
                 "trace_steps": trace
             }
 
@@ -197,14 +210,13 @@ class CodeRAGGraph:
     def grade_relevance(self, state: CodeRAGState) -> Dict[str, Any]:
         trace = list(state.get("trace_steps", []))
         
-        if state.get("user_code_snippet"):
-            trace.append("Relevance grade: Passed (Direct user code).")
+        docs = state.get("retrieved_docs", [])
+        if state.get("user_code_snippet") or state.get("query_intent") == "repository_structure" or any(d.get("metadata", {}).get("is_tree") for d in docs):
+            trace.append("Relevance grade: Passed (Structure or direct user code).")
             return {
                 "is_relevant": True,
                 "trace_steps": trace
             }
-
-        docs = state.get("retrieved_docs", [])
         entities = state.get("extracted_entities", [])
         retry = state.get("retry_count", 0)
 
@@ -292,40 +304,61 @@ User Question: {question}
             }
 
         docs = state.get("retrieved_docs", [])
+        tree_doc = next((d for d in docs if d.get("metadata", {}).get("is_tree", False)), None)
         full_file_doc = next((d for d in docs if d.get("metadata", {}).get("is_full_file", False)), None)
         question = state.get("original_question", state["question"])
 
-        if full_file_doc:
+        if tree_doc:
+            tree_content = tree_doc.get("content", "")
+            wants_expl = tree_doc.get("metadata", {}).get("wants_explanation", False)
+            if wants_expl:
+                arch_prompt = (
+                    f"Repository: {state.get('repo_id', '')}\n"
+                    f"Directory Tree:\n{tree_content}\n\n"
+                    f"User Question: {question}\n\n"
+                    f"CRITICAL INSTRUCTION: The complete directory tree has ALREADY been displayed to the user in the block above.\n"
+                    f"DO NOT reprint any tree or code blocks.\n"
+                    f"Directly explain the responsibility and architectural purpose of each major directory or module shown in the tree.\n"
+                    f"Base your explanation strictly on actual repository files and modules."
+                )
+                try:
+                    expl = self.ollama.generate(prompt=arch_prompt, system_prompt=SYSTEM_PROMPT)
+                    answer = f"{tree_content}\n\n### Module & Directory Responsibilities\n\n{expl}"
+                except Exception:
+                    answer = tree_content
+            else:
+                answer = tree_content
+        elif full_file_doc:
             rel_p = full_file_doc.get("metadata", {}).get("rel_path", "")
             lang = full_file_doc.get("metadata", {}).get("language", "python")
             raw_content = full_file_doc.get("content", "")
             
-            # Instant exact code block (ONLY ONCE)
-            answer_parts = [f"Here is the complete, untruncated source code for `{rel_p}`:\n\n```{lang}\n{raw_content}\n```\n\n### 📝 Explanation & Breakdown:\n\n"]
-            
-            # Fast explanation via LLM
-            imports_and_structure = "\n".join([
-                line for line in raw_content.splitlines()[:60]
-                if any(line.strip().startswith(kw) for kw in ["import ", "from ", "export ", "def ", "class ", "function ", "const "])
-            ])
-            summary_prompt = (
-                f"File: `{rel_p}`\n"
-                f"Symbols/Imports Overview:\n{imports_and_structure or raw_content[:300]}\n\n"
-                f"User Question: {question}\n\n"
-                f"CRITICAL INSTRUCTION: The complete source code has ALREADY been displayed to the user in the block above.\n"
-                f"DO NOT repeat, re-output, or reprint any code blocks or file contents.\n"
-                f"Directly start your answer with the explanation breakdown:\n"
-                f"- **Summary & Purpose**: High-level overview of what this file does.\n"
-                f"- **Key Components & Functions**: What each main part does.\n"
-                f"- **Logic Flow**: How data and control flow through this file."
-            )
-            try:
-                expl = self.ollama.generate(prompt=summary_prompt, system_prompt=SYSTEM_PROMPT)
-                answer_parts.append(expl)
-            except Exception:
-                answer_parts.append(f"This file `{rel_p}` contains the complete implementation shown above.")
-            
-            answer = "".join(answer_parts)
+            wants_expl = any(w in question.lower() for w in ["explain", "breakdown", "break down", "how does", "what does", "walk through", "line by line"])
+            if wants_expl:
+                answer_parts = [f"Here is the complete source code for `{rel_p}`:\n\n```{lang}\n{raw_content}\n```\n\n### Explanation & Breakdown:\n\n"]
+                imports_and_structure = "\n".join([
+                    line for line in raw_content.splitlines()[:60]
+                    if any(line.strip().startswith(kw) for kw in ["import ", "from ", "export ", "def ", "class ", "function ", "const "])
+                ])
+                summary_prompt = (
+                    f"File: `{rel_p}`\n"
+                    f"Symbols/Imports Overview:\n{imports_and_structure or raw_content[:300]}\n\n"
+                    f"User Question: {question}\n\n"
+                    f"CRITICAL INSTRUCTION: The complete source code has ALREADY been displayed to the user in the block above.\n"
+                    f"DO NOT repeat, re-output, or reprint any code blocks or file contents.\n"
+                    f"Directly start your answer with the explanation breakdown:\n"
+                    f"- **Summary & Purpose**: High-level overview of what this file does.\n"
+                    f"- **Key Components & Functions**: What each main part does.\n"
+                    f"- **Logic Flow**: How data and control flow through this file."
+                )
+                try:
+                    expl = self.ollama.generate(prompt=summary_prompt, system_prompt=SYSTEM_PROMPT)
+                    answer_parts.append(expl)
+                except Exception:
+                    answer_parts.append(f"This file `{rel_p}` contains the complete implementation shown above.")
+                answer = "".join(answer_parts)
+            else:
+                answer = f"Here is the complete source code for `{rel_p}`:\n\n```{lang}\n{raw_content}\n```"
         else:
             system_prompt = SYSTEM_PROMPT
             user_prompt = self._build_user_prompt(state)
@@ -425,6 +458,7 @@ User Question: {question}
         yield {"type": "trace", "step": "Generating response..."}
         
         docs = state.get("retrieved_docs", [])
+        tree_doc = next((d for d in docs if d.get("metadata", {}).get("is_tree", False)), None)
         full_file_doc = next((d for d in docs if d.get("metadata", {}).get("is_full_file", False)), None)
         question = state.get("original_question", state["question"])
 
@@ -442,7 +476,27 @@ User Question: {question}
                 "snippet": d.get("content", "")
             })
 
-        if full_file_doc:
+        if tree_doc:
+            tree_content = tree_doc.get("content", "")
+            wants_expl = tree_doc.get("metadata", {}).get("wants_explanation", False)
+            yield {"type": "token", "content": tree_content}
+            if wants_expl:
+                yield {"type": "token", "content": "\n\n### Module & Directory Responsibilities\n\n"}
+                arch_prompt = (
+                    f"Repository: {state.get('repo_id', '')}\n"
+                    f"Directory Tree:\n{tree_content}\n\n"
+                    f"User Question: {question}\n\n"
+                    f"CRITICAL INSTRUCTION: The complete directory tree has ALREADY been displayed to the user in the block above.\n"
+                    f"DO NOT reprint any tree or code blocks.\n"
+                    f"Directly explain the responsibility and architectural purpose of each major directory or module shown in the tree.\n"
+                    f"Base your explanation strictly on actual repository files and modules."
+                )
+                try:
+                    for token in self.ollama.generate_stream(prompt=arch_prompt, system_prompt=SYSTEM_PROMPT):
+                        yield {"type": "token", "content": token}
+                except Exception:
+                    pass
+        elif full_file_doc:
             import time
             rel_p = full_file_doc.get("metadata", {}).get("rel_path", "")
             lang = full_file_doc.get("metadata", {}).get("language", "python")
@@ -460,30 +514,32 @@ User Question: {question}
                 yield {"type": "token", "content": line}
                 time.sleep(delay)
 
-            # 3. Close code block and start breakdown
-            yield {"type": "token", "content": "\n```\n\n### 📝 Explanation & Breakdown:\n\n"}
+            # 3. Close code block and start breakdown if requested
+            yield {"type": "token", "content": "\n```"}
 
-            # 4. Stream fast breakdown
-            imports_and_structure = "\n".join([
-                line for line in lines[:60]
-                if any(line.strip().startswith(kw) for kw in ["import ", "from ", "export ", "def ", "class ", "function ", "const "])
-            ])
-            summary_prompt = (
-                f"File: `{rel_p}`\n"
-                f"Symbols/Imports Overview:\n{imports_and_structure or raw_content[:300]}\n\n"
-                f"User Question: {question}\n\n"
-                f"CRITICAL INSTRUCTION: The complete source code has ALREADY been displayed to the user in the block above.\n"
-                f"DO NOT repeat, re-output, or reprint any code blocks or file contents.\n"
-                f"Directly start your answer with the explanation breakdown:\n"
-                f"- **Summary & Purpose**: High-level overview of what this file does.\n"
-                f"- **Key Components & Functions**: What each main part does.\n"
-                f"- **Logic Flow**: How data and control flow through this file."
-            )
-            try:
-                for token in self.ollama.generate_stream(prompt=summary_prompt, system_prompt=SYSTEM_PROMPT):
-                    yield {"type": "token", "content": token}
-            except Exception:
-                yield {"type": "token", "content": f"The full file `{rel_p}` is displayed above."}
+            wants_expl = any(w in question.lower() for w in ["explain", "breakdown", "break down", "how does", "what does", "walk through", "line by line"])
+            if wants_expl:
+                yield {"type": "token", "content": "\n\n### Explanation & Breakdown:\n\n"}
+                imports_and_structure = "\n".join([
+                    line for line in lines[:60]
+                    if any(line.strip().startswith(kw) for kw in ["import ", "from ", "export ", "def ", "class ", "function ", "const "])
+                ])
+                summary_prompt = (
+                    f"File: `{rel_p}`\n"
+                    f"Symbols/Imports Overview:\n{imports_and_structure or raw_content[:300]}\n\n"
+                    f"User Question: {question}\n\n"
+                    f"CRITICAL INSTRUCTION: The complete source code has ALREADY been displayed to the user in the block above.\n"
+                    f"DO NOT repeat, re-output, or reprint any code blocks or file contents.\n"
+                    f"Directly start your answer with the explanation breakdown:\n"
+                    f"- **Summary & Purpose**: High-level overview of what this file does.\n"
+                    f"- **Key Components & Functions**: What each main part does.\n"
+                    f"- **Logic Flow**: How data and control flow through this file."
+                )
+                try:
+                    for token in self.ollama.generate_stream(prompt=summary_prompt, system_prompt=SYSTEM_PROMPT):
+                        yield {"type": "token", "content": token}
+                except Exception:
+                    yield {"type": "token", "content": f"The full file `{rel_p}` is displayed above."}
         else:
             system_prompt = SYSTEM_PROMPT
             user_prompt = self._build_user_prompt(state)
@@ -542,6 +598,7 @@ User Question: {question}
         yield {"type": "trace", "step": "Generating response..."}
 
         docs = state.get("retrieved_docs", [])
+        tree_doc = next((d for d in docs if d.get("metadata", {}).get("is_tree", False)), None)
         full_file_doc = next((d for d in docs if d.get("metadata", {}).get("is_full_file", False)), None)
         question = state.get("original_question", state["question"])
 
@@ -559,7 +616,27 @@ User Question: {question}
                 "snippet": d.get("content", "")
             })
 
-        if full_file_doc:
+        if tree_doc:
+            tree_content = tree_doc.get("content", "")
+            wants_expl = tree_doc.get("metadata", {}).get("wants_explanation", False)
+            yield {"type": "token", "content": tree_content}
+            if wants_expl:
+                yield {"type": "token", "content": "\n\n### Module & Directory Responsibilities\n\n"}
+                arch_prompt = (
+                    f"Repository: {state.get('repo_id', '')}\n"
+                    f"Directory Tree:\n{tree_content}\n\n"
+                    f"User Question: {question}\n\n"
+                    f"CRITICAL INSTRUCTION: The complete directory tree has ALREADY been displayed to the user in the block above.\n"
+                    f"DO NOT reprint any tree or code blocks.\n"
+                    f"Directly explain the responsibility and architectural purpose of each major directory or module shown in the tree.\n"
+                    f"Base your explanation strictly on actual repository files and modules."
+                )
+                try:
+                    async for token in self.ollama.generate_stream_async(prompt=arch_prompt, system_prompt=SYSTEM_PROMPT):
+                        yield {"type": "token", "content": token}
+                except Exception:
+                    pass
+        elif full_file_doc:
             rel_p = full_file_doc.get("metadata", {}).get("rel_path", "")
             lang = full_file_doc.get("metadata", {}).get("language", "python")
             raw_content = full_file_doc.get("content", "")
@@ -576,30 +653,32 @@ User Question: {question}
                 yield {"type": "token", "content": line}
                 await asyncio.sleep(delay)
 
-            # 3. Close code block and start breakdown
-            yield {"type": "token", "content": "\n```\n\n### 📝 Explanation & Breakdown:\n\n"}
+            # 3. Close code block and start breakdown if requested
+            yield {"type": "token", "content": "\n```"}
 
-            # 4. Stream fast breakdown
-            imports_and_structure = "\n".join([
-                line for line in lines[:60]
-                if any(line.strip().startswith(kw) for kw in ["import ", "from ", "export ", "def ", "class ", "function ", "const "])
-            ])
-            summary_prompt = (
-                f"File: `{rel_p}`\n"
-                f"Symbols/Imports Overview:\n{imports_and_structure or raw_content[:300]}\n\n"
-                f"User Question: {question}\n\n"
-                f"CRITICAL INSTRUCTION: The complete source code has ALREADY been displayed to the user in the block above.\n"
-                f"DO NOT repeat, re-output, or reprint any code blocks or file contents.\n"
-                f"Directly start your answer with the explanation breakdown:\n"
-                f"- **Summary & Purpose**: High-level overview of what this file does.\n"
-                f"- **Key Components & Functions**: What each main part does.\n"
-                f"- **Logic Flow**: How data and control flow through this file."
-            )
-            try:
-                async for token in self.ollama.generate_stream_async(prompt=summary_prompt, system_prompt=SYSTEM_PROMPT):
-                    yield {"type": "token", "content": token}
-            except Exception:
-                yield {"type": "token", "content": f"The full file `{rel_p}` is displayed above."}
+            wants_expl = any(w in question.lower() for w in ["explain", "breakdown", "break down", "how does", "what does", "walk through", "line by line"])
+            if wants_expl:
+                yield {"type": "token", "content": "\n\n### Explanation & Breakdown:\n\n"}
+                imports_and_structure = "\n".join([
+                    line for line in lines[:60]
+                    if any(line.strip().startswith(kw) for kw in ["import ", "from ", "export ", "def ", "class ", "function ", "const "])
+                ])
+                summary_prompt = (
+                    f"File: `{rel_p}`\n"
+                    f"Symbols/Imports Overview:\n{imports_and_structure or raw_content[:300]}\n\n"
+                    f"User Question: {question}\n\n"
+                    f"CRITICAL INSTRUCTION: The complete source code has ALREADY been displayed to the user in the block above.\n"
+                    f"DO NOT repeat, re-output, or reprint any code blocks or file contents.\n"
+                    f"Directly start your answer with the explanation breakdown:\n"
+                    f"- **Summary & Purpose**: High-level overview of what this file does.\n"
+                    f"- **Key Components & Functions**: What each main part does.\n"
+                    f"- **Logic Flow**: How data and control flow through this file."
+                )
+                try:
+                    async for token in self.ollama.generate_stream_async(prompt=summary_prompt, system_prompt=SYSTEM_PROMPT):
+                        yield {"type": "token", "content": token}
+                except Exception:
+                    yield {"type": "token", "content": f"The full file `{rel_p}` is displayed above."}
         else:
             system_prompt = SYSTEM_PROMPT
             user_prompt = self._build_user_prompt(state)

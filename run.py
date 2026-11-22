@@ -10,11 +10,11 @@ def is_port_in_use(port: int) -> bool:
 def main():
     port = int(os.environ.get("PORT", 8000))
     if is_port_in_use(port):
-        print(f"⚠️ Port {port} is already in use by another process.")
+        print(f"[WARNING] Port {port} is already in use by another process.")
 
     print("==================================================")
-    print("🚀 GitHub Code RAG (OLMo + LangGraph)")
-    print(f"🌐 Web UI & API live at: http://localhost:{port}")
+    print("GitHub Code RAG (OLMo + LangGraph)")
+    print(f"Web UI & API live at: http://localhost:{port}")
     print("==================================================")
 
     sys.path.insert(0, os.path.abspath("src"))
