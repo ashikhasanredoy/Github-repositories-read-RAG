@@ -14,3 +14,5 @@ class CodeRAGState(TypedDict, total=False):
     sources: List[Dict[str, Any]]
     trace_steps: List[str]
     user_code_snippet: Optional[Dict[str, Any]]
+    conversation_id: Optional[str]
+    turn_id: Optional[str]

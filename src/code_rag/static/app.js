@@ -18,7 +18,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const conversationsList = document.getElementById("conversationsList");
     const repoSelect = document.getElementById("repoSelect");
     const deleteRepoBtn = document.getElementById("deleteRepoBtn");
-    const indexedReposList = document.getElementById("indexedReposList");
     const modelSelect = document.getElementById("modelSelect");
     const chatContainer = document.getElementById("chatContainer");
     const queryForm = document.getElementById("queryForm");
@@ -31,14 +30,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const quickPasteLocalBtn = document.getElementById("quickPasteLocalBtn");
     const heroQuickIndexBtn = document.getElementById("heroQuickIndexBtn");
     const inputRepoLabel = document.getElementById("inputRepoLabel");
-    const selectedRepoName = document.getElementById("selectedRepoName");
-    const repoMeta = document.getElementById("repoMeta");
     const welcomeHero = document.getElementById("welcomeHero");
     const toastContainer = document.getElementById("toastContainer");
     const scrollBottomBtn = document.getElementById("scrollBottomBtn");
 
-    const LOCAL_WORKSPACE_PATH = window.location.origin.includes("localhost") 
-        ? "/Users/macbookpro/Downloads/Github-repositories-read-RAG" 
+    const LOCAL_WORKSPACE_PATH = window.location.origin.includes("localhost")
+        ? "/Users/macbookpro/Downloads/Github-repositories-read-RAG"
         : ".";
 
     let isSubmitting = false;
@@ -76,81 +73,301 @@ document.addEventListener("DOMContentLoaded", () => {
     async function init() {
         setupTheme();
         setupEventListeners();
-        loadConversationsFromMemory();
+        await loadConversationsFromBackend();
         await checkStatus();
         await loadModels();
         await loadRepos();
     }
 
     // =========================================================================
-    // Long-Term Multi-Conversation Memory Management
+    // Custom Modal System (Confirm & Prompt Dialogs) & Project Guide Modal
     // =========================================================================
-    function loadConversationsFromMemory() {
+    const customModalOverlay = document.getElementById("customModalOverlay");
+    const customModalCloseBtn = document.getElementById("customModalCloseBtn");
+    const customModalIconWrap = document.getElementById("customModalIconWrap");
+    const customModalTitle = document.getElementById("customModalTitle");
+    const customModalDesc = document.getElementById("customModalDesc");
+    const customModalInputWrap = document.getElementById("customModalInputWrap");
+    const customModalInput = document.getElementById("customModalInput");
+    const customModalCancelBtn = document.getElementById("customModalCancelBtn");
+    const customModalConfirmBtn = document.getElementById("customModalConfirmBtn");
+
+    const guideModalOverlay = document.getElementById("guideModalOverlay");
+    const guideModalCloseBtn = document.getElementById("guideModalCloseBtn");
+    const guideModalGotItBtn = document.getElementById("guideModalGotItBtn");
+    const projectGuideBtn = document.getElementById("projectGuideBtn");
+
+    function openGuideModal() {
+        if (!guideModalOverlay) return;
+        guideModalOverlay.style.display = "flex";
+        requestAnimationFrame(() => {
+            guideModalOverlay.classList.add("active");
+        });
+    }
+
+    function closeGuideModal() {
+        if (!guideModalOverlay) return;
+        guideModalOverlay.classList.remove("active");
+        setTimeout(() => {
+            guideModalOverlay.style.display = "none";
+        }, 180);
+    }
+
+    if (projectGuideBtn) {
+        projectGuideBtn.addEventListener("click", openGuideModal);
+    }
+    if (guideModalCloseBtn) {
+        guideModalCloseBtn.addEventListener("click", closeGuideModal);
+    }
+    if (guideModalGotItBtn) {
+        guideModalGotItBtn.addEventListener("click", closeGuideModal);
+    }
+    if (guideModalOverlay) {
+        guideModalOverlay.addEventListener("click", (e) => {
+            if (e.target === guideModalOverlay) closeGuideModal();
+        });
+    }
+
+    let activeModalResolver = null;
+
+    function closeModal(result) {
+        if (!customModalOverlay) return;
+        customModalOverlay.classList.remove("active");
+        setTimeout(() => {
+            customModalOverlay.style.display = "none";
+            if (activeModalResolver) {
+                const resolver = activeModalResolver;
+                activeModalResolver = null;
+                resolver(result);
+            }
+        }, 180);
+    }
+
+    if (customModalCloseBtn) {
+        customModalCloseBtn.addEventListener("click", () => closeModal(null));
+    }
+    if (customModalCancelBtn) {
+        customModalCancelBtn.addEventListener("click", () => closeModal(null));
+    }
+    if (customModalOverlay) {
+        customModalOverlay.addEventListener("click", (e) => {
+            if (e.target === customModalOverlay) {
+                closeModal(null);
+            }
+        });
+    }
+
+    document.addEventListener("keydown", (e) => {
+        if (customModalOverlay && customModalOverlay.classList.contains("active")) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeModal(null);
+            } else if (e.key === "Enter" && !e.shiftKey) {
+                if (document.activeElement === customModalCancelBtn) {
+                    closeModal(null);
+                } else {
+                    e.preventDefault();
+                    if (customModalConfirmBtn) customModalConfirmBtn.click();
+                }
+            }
+        } else if (guideModalOverlay && guideModalOverlay.classList.contains("active")) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeGuideModal();
+            }
+        }
+    });
+
+    function showConfirmModal({
+        title = "Are you sure?",
+        message = "",
+        subtext = "",
+        confirmText = "Confirm",
+        cancelText = "Cancel",
+        isDanger = false
+    }) {
+        return new Promise((resolve) => {
+            activeModalResolver = resolve;
+
+            customModalTitle.textContent = title;
+            customModalDesc.textContent = subtext ? `${message}\n\n${subtext}` : message;
+
+            customModalInputWrap.style.display = "none";
+
+            if (isDanger) {
+                customModalIconWrap.className = "custom-modal-icon-wrap danger";
+                customModalIconWrap.innerHTML = `
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                `;
+                customModalConfirmBtn.className = "btn-modal btn-modal-confirm danger";
+            } else {
+                customModalIconWrap.className = "custom-modal-icon-wrap primary";
+                customModalIconWrap.innerHTML = `
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                `;
+                customModalConfirmBtn.className = "btn-modal btn-modal-confirm";
+            }
+
+            customModalConfirmBtn.textContent = confirmText;
+            customModalCancelBtn.textContent = cancelText;
+
+            customModalConfirmBtn.onclick = () => closeModal(true);
+            customModalCancelBtn.onclick = () => closeModal(false);
+
+            customModalOverlay.style.display = "flex";
+            requestAnimationFrame(() => {
+                customModalOverlay.classList.add("active");
+                customModalConfirmBtn.focus();
+            });
+        });
+    }
+
+    function showPromptModal({
+        title = "Prompt",
+        message = "",
+        defaultValue = "",
+        placeholder = "",
+        confirmText = "Save",
+        cancelText = "Cancel"
+    }) {
+        return new Promise((resolve) => {
+            activeModalResolver = resolve;
+
+            customModalTitle.textContent = title;
+            customModalDesc.textContent = message;
+
+            customModalInputWrap.style.display = "block";
+            customModalInput.value = defaultValue || "";
+            customModalInput.placeholder = placeholder || "";
+
+            customModalIconWrap.className = "custom-modal-icon-wrap primary";
+            customModalIconWrap.innerHTML = `
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+            `;
+            customModalConfirmBtn.className = "btn-modal btn-modal-confirm";
+            customModalConfirmBtn.textContent = confirmText;
+            customModalCancelBtn.textContent = cancelText;
+
+            customModalConfirmBtn.onclick = () => closeModal(customModalInput.value);
+            customModalCancelBtn.onclick = () => closeModal(null);
+
+            customModalOverlay.style.display = "flex";
+            requestAnimationFrame(() => {
+                customModalOverlay.classList.add("active");
+                customModalInput.focus();
+                customModalInput.select();
+            });
+        });
+    }
+
+    // =========================================================================
+    // Permanent SQLite3 Conversation & Turn History Management
+    // =========================================================================
+
+    async function fetchConversationsList() {
         try {
-            const savedConvs = localStorage.getItem("coderag_conversations");
-            if (savedConvs) {
-                const parsed = JSON.parse(savedConvs);
-                if (Array.isArray(parsed)) {
-                    conversations = parsed;
-                }
+            const res = await fetch("/api/conversations");
+            if (res.ok) {
+                const data = await res.json();
+                conversations = data.conversations || [];
+                renderConversationsList();
             }
+        } catch (err) {
+            console.warn("Unable to fetch conversations list from backend:", err);
+        }
+    }
 
-            // Migration from legacy single-chat history if exists
-            const legacyHistory = localStorage.getItem("coderag_chat_history");
-            if (legacyHistory && conversations.length === 0) {
-                try {
-                    const parsedHist = JSON.parse(legacyHistory);
-                    if (Array.isArray(parsedHist) && parsedHist.length > 0) {
-                        const firstQ = parsedHist.find(m => m.type === "user");
-                        const title = firstQ ? firstQ.text.slice(0, 32) : "Initial Conversation";
-                        const legacyConv = {
-                            id: "conv_" + Date.now(),
-                            title: title,
-                            timestamp: Date.now(),
-                            repo: localStorage.getItem("coderag_selected_repo") || "",
-                            model: localStorage.getItem("coderag_selected_model") || "",
-                            messages: parsedHist
-                        };
-                        conversations = [legacyConv];
-                        saveConversationsToMemory();
-                    }
-                } catch {
-                    // Ignore legacy parse failure
-                }
+    async function loadConversationsFromBackend() {
+        try {
+            await fetchConversationsList();
+            const savedActiveId = localStorage.getItem("coderag_active_conv_id");
+            if (savedActiveId && conversations.some(c => (c.conversation_id || c.id) === savedActiveId)) {
+                activeConvId = savedActiveId;
+                await loadConversationMessages(activeConvId);
+            } else if (conversations.length > 0) {
+                activeConvId = conversations[0].conversation_id || conversations[0].id;
+                localStorage.setItem("coderag_active_conv_id", activeConvId);
+                await loadConversationMessages(activeConvId);
+            } else {
+                startNewConversation(false);
             }
-
-            activeConvId = localStorage.getItem("coderag_active_conv_id");
-            if (!activeConvId && conversations.length > 0) {
-                activeConvId = conversations[0].id;
-            }
-
-            restoreActiveChatUI();
             renderConversationsList();
         } catch (err) {
-            console.error("Error loading conversation memory:", err);
+            console.error("Error loading conversations from SQLite3 backend:", err);
             startNewConversation(false);
         }
     }
 
-    function saveConversationsToMemory() {
+    async function loadConversationMessages(convId) {
+        if (!convId) return;
         try {
-            localStorage.setItem("coderag_conversations", JSON.stringify(conversations));
-            if (activeConvId) {
-                localStorage.setItem("coderag_active_conv_id", activeConvId);
-            } else {
-                localStorage.removeItem("coderag_active_conv_id");
+            const res = await fetch(`/api/conversations/${encodeURIComponent(convId)}`);
+            if (!res.ok) {
+                if (res.status === 404) {
+                    startNewConversation(false);
+                }
+                return;
             }
+            const conv = await res.json();
+            renderConversationMessages(conv.messages || []);
         } catch (err) {
-            console.warn("Unable to save conversations to memory:", err);
+            console.error("Error loading conversation messages from SQLite3 backend:", err);
         }
     }
 
+    function renderConversationMessages(messages) {
+        chatContainer.innerHTML = "";
+        if (!messages || messages.length === 0) {
+            if (welcomeHero) {
+                chatContainer.appendChild(welcomeHero);
+            }
+            updateScrollState();
+            return;
+        }
+
+        messages.forEach((m, idx) => {
+            if (m.role === "user") {
+                appendMsg("user", m.content, idx, m.turn_id);
+            } else if (m.role === "assistant") {
+                const row = appendMsg("bot", "", idx, m.turn_id);
+                const bubble = row.querySelector(".msg-bubble");
+                const textDiv = document.createElement("div");
+                textDiv.className = "markdown-body";
+                renderMarkdown(textDiv, m.content || "");
+                bubble.appendChild(textDiv);
+                renderExtras(bubble, m.sources || [], [], m.content || "", null);
+            }
+        });
+
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        updateScrollState();
+    }
+
     function startNewConversation(shouldToast = true) {
+        if (isSubmitting && currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+            isSubmitting = false;
+        }
         queryQueue = [];
         activeConvId = "conv_" + Date.now();
-        chatHistory = [];
-        saveConversationsToMemory();
-        restoreActiveChatUI();
+        localStorage.setItem("coderag_active_conv_id", activeConvId);
+        chatContainer.innerHTML = "";
+        if (welcomeHero) {
+            chatContainer.appendChild(welcomeHero);
+        }
         renderConversationsList();
         if (queryInput) {
             queryInput.value = "";
@@ -165,78 +382,102 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function selectConversation(convId) {
+    async function selectConversation(convId) {
         if (activeConvId === convId) return;
+        if (isSubmitting && currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+            isSubmitting = false;
+        }
         queryQueue = [];
         activeConvId = convId;
-        saveConversationsToMemory();
-        restoreActiveChatUI();
+        localStorage.setItem("coderag_active_conv_id", activeConvId);
         renderConversationsList();
+        await loadConversationMessages(activeConvId);
     }
 
-    function deleteConversation(convId, e) {
+    async function deleteConversation(convId, e) {
         if (e) e.stopPropagation();
-        const idx = conversations.findIndex(c => c.id === convId);
-        if (idx !== -1) {
-            const deletedTitle = conversations[idx].title || "Conversation";
-            conversations.splice(idx, 1);
-            if (activeConvId === convId) {
-                if (conversations.length > 0) {
-                    activeConvId = conversations[0].id;
-                } else {
-                    activeConvId = "conv_" + Date.now();
+        const confirmed = await showConfirmModal({
+            title: "Delete Conversation",
+            message: "Are you sure you want to delete this conversation?",
+            subtext: "This will permanently remove the conversation and all its Q&A messages from your database.",
+            confirmText: "Delete",
+            cancelText: "Cancel",
+            isDanger: true
+        });
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch(`/api/conversations/${encodeURIComponent(convId)}`, {
+                method: "DELETE"
+            });
+            if (res.ok) {
+                showToast("Conversation deleted", "info", 2000);
+                if (activeConvId === convId) {
+                    activeConvId = null;
+                    localStorage.removeItem("coderag_active_conv_id");
                 }
+                await fetchConversationsList();
+                if (!activeConvId) {
+                    if (conversations.length > 0) {
+                        selectConversation(conversations[0].conversation_id || conversations[0].id);
+                    } else {
+                        startNewConversation(false);
+                    }
+                }
+            } else {
+                showToast("Failed to delete conversation", "error");
             }
-            saveConversationsToMemory();
-            restoreActiveChatUI();
-            renderConversationsList();
-            showToast(`Deleted "${deletedTitle}"`, "info", 2500);
+        } catch (err) {
+            console.error("Error deleting conversation:", err);
+            showToast("Error deleting conversation", "error");
         }
     }
 
-    function restoreActiveChatUI() {
-        chatContainer.innerHTML = "";
-        const currentConv = conversations.find(c => c.id === activeConvId);
-        chatHistory = currentConv ? (currentConv.messages || []) : [];
+    async function renameConversation(convId, currentTitle, e) {
+        if (e) e.stopPropagation();
+        const newTitle = await showPromptModal({
+            title: "Rename Conversation",
+            message: "Enter a new title for this conversation:",
+            defaultValue: currentTitle,
+            placeholder: "Conversation title",
+            confirmText: "Save",
+            cancelText: "Cancel"
+        });
+        if (!newTitle || !newTitle.trim() || newTitle.trim() === currentTitle) return;
 
-        if (chatHistory.length > 0) {
-            chatHistory.forEach((item, index) => {
-                if (item.type === "user") {
-                    appendMsg("user", item.text, index);
-                } else if (item.type === "bot") {
-                    const row = appendMsg("bot", "", index);
-                    const bubble = row.querySelector(".msg-bubble");
-                    const textDiv = document.createElement("div");
-                    textDiv.className = "markdown-body";
-                    renderMarkdown(textDiv, item.text || "");
-                    bubble.appendChild(textDiv);
-                    renderExtras(bubble, item.sources || [], item.traceSteps || [], item.text || "", item.elapsedTime || null);
-                }
+        try {
+            const res = await fetch(`/api/conversations/${encodeURIComponent(convId)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: newTitle.trim() })
             });
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        } else {
-            if (welcomeHero) {
-                chatContainer.appendChild(welcomeHero);
+            if (res.ok) {
+                showToast("Conversation renamed", "success", 2000);
+                await fetchConversationsList();
+            } else {
+                showToast("Failed to rename conversation", "error");
             }
+        } catch (err) {
+            console.error("Error renaming conversation:", err);
+            showToast("Error renaming conversation", "error");
         }
-        updateScrollState();
     }
 
     function renderConversationsList() {
         if (!conversationsList) return;
         conversationsList.innerHTML = "";
 
-        if (conversations.length === 0) {
+        if (!conversations || conversations.length === 0) {
             conversationsList.innerHTML = `<div class="conversations-empty">No previous chats yet</div>`;
             return;
         }
 
-        // Sort latest first
-        const sorted = [...conversations].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-        sorted.forEach(c => {
+        conversations.forEach(c => {
+            const cid = c.conversation_id || c.id;
             const item = document.createElement("div");
-            item.className = `conv-item ${c.id === activeConvId ? "active" : ""}`;
+            item.className = `conv-item ${cid === activeConvId ? "active" : ""}`;
             const displayTitle = c.title || "New Chat";
 
             item.innerHTML = `
@@ -246,70 +487,34 @@ document.addEventListener("DOMContentLoaded", () => {
                     </span>
                     <span class="conv-title" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</span>
                 </div>
-                <button type="button" class="btn-delete-conv" title="Delete conversation">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                </button>
+                <div class="conv-actions">
+                    <button type="button" class="btn-rename-conv" title="Rename conversation">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                    <button type="button" class="btn-delete-conv" title="Delete conversation">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
             `;
 
-            item.addEventListener("click", () => selectConversation(c.id));
+            item.addEventListener("click", () => selectConversation(cid));
+            const renBtn = item.querySelector(".btn-rename-conv");
+            if (renBtn) {
+                renBtn.addEventListener("click", (e) => renameConversation(cid, displayTitle, e));
+            }
             const delBtn = item.querySelector(".btn-delete-conv");
-            delBtn.addEventListener("click", (e) => deleteConversation(c.id, e));
+            if (delBtn) {
+                delBtn.addEventListener("click", (e) => deleteConversation(cid, e));
+            }
 
             conversationsList.appendChild(item);
         });
     }
 
     let currentModel = "llama3.2:latest";
-
-    function recordUserMessageInConversation(text) {
-        if (!activeConvId) {
-            activeConvId = "conv_" + Date.now();
-        }
-
-        let conv = conversations.find(c => c.id === activeConvId);
-        const activeModelName = (modelSelect && modelSelect.value) ? modelSelect.value : currentModel;
-        if (!conv) {
-            conv = {
-                id: activeConvId,
-                title: text.slice(0, 36) + (text.length > 36 ? "..." : ""),
-                timestamp: Date.now(),
-                repo: (repoSelect && repoSelect.value) ? repoSelect.value : "",
-                model: activeModelName,
-                messages: []
-            };
-            conversations.unshift(conv);
-        } else {
-            conv.timestamp = Date.now();
-            if (repoSelect && repoSelect.value) conv.repo = repoSelect.value;
-            conv.model = activeModelName || conv.model;
-            if (!conv.title || conv.title === "New Chat" || conv.messages.length === 0) {
-                conv.title = text.slice(0, 36) + (text.length > 36 ? "..." : "");
-            }
-        }
-
-        conv.messages.push({ type: "user", text: text });
-        chatHistory = conv.messages;
-        saveConversationsToMemory();
-        renderConversationsList();
-        return conv.messages.length - 1;
-    }
-
-    function recordBotMessageInConversation(text, sources, traceSteps, elapsedTime = null) {
-        let conv = conversations.find(c => c.id === activeConvId);
-        if (conv) {
-            conv.timestamp = Date.now();
-            conv.messages.push({
-                type: "bot",
-                text: text,
-                sources: sources || [],
-                traceSteps: traceSteps || [],
-                elapsedTime: elapsedTime || null
-            });
-            chatHistory = conv.messages;
-            saveConversationsToMemory();
-            renderConversationsList();
-        }
-    }
 
     // =========================================================================
     // Event Listeners & UI Helpers
@@ -336,20 +541,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 e.preventDefault();
                 startNewConversation(true);
             }
-        });
-        // Quick suggestions chips
-        document.querySelectorAll(".q-chip").forEach(chip => {
-            chip.addEventListener("click", () => {
-                const query = chip.dataset.query;
-                if (!repoSelect.value) {
-                    showToast("Please index and select a repository first.", "warning");
-                    if (repoSourceInput) repoSourceInput.focus();
-                    return;
-                }
-                queryInput.value = query;
-                autoResizeTextarea();
-                queryForm.dispatchEvent(new Event("submit"));
-            });
         });
 
         // Quick paste local repo buttons
@@ -390,19 +581,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (clearChatBtn) {
             clearChatBtn.addEventListener("click", () => {
                 queryQueue = [];
-                if (activeConvId) {
-                    const conv = conversations.find(c => c.id === activeConvId);
-                    if (conv) {
-                        conv.messages = [];
-                    }
-                    chatHistory = [];
-                    saveConversationsToMemory();
-                }
-                chatContainer.innerHTML = "";
-                if (welcomeHero) {
-                    chatContainer.appendChild(welcomeHero);
-                }
-                showToast("Active conversation cleared", "info", 2000);
+                startNewConversation(true);
             });
         }
 
@@ -456,7 +635,14 @@ document.addEventListener("DOMContentLoaded", () => {
         async function executeRepoDelete(targetRepo) {
             if (!targetRepo) return;
 
-            const confirmed = window.confirm(`Are you sure you want to delete indexed repository "${targetRepo}"?\n\nThis will permanently remove its vector embeddings, BM25 search index, and cached files.`);
+            const confirmed = await showConfirmModal({
+                title: "Delete Indexed Repository",
+                message: `Are you sure you want to delete indexed repository "${targetRepo}"?`,
+                subtext: "This will permanently remove its vector embeddings, BM25 search index, and cached files.",
+                confirmText: "Delete",
+                cancelText: "Cancel",
+                isDanger: true
+            });
             if (!confirmed) return;
 
             if (deleteRepoBtn) {
@@ -504,31 +690,6 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Indexed Repositories List Click Delegation
-        if (indexedReposList) {
-            indexedReposList.addEventListener("click", async (e) => {
-                const delBtn = e.target.closest(".btn-delete-repo-item");
-                if (delBtn) {
-                    const targetRepo = delBtn.getAttribute("data-repo");
-                    if (targetRepo) {
-                        await executeRepoDelete(targetRepo);
-                    }
-                    return;
-                }
-
-                const nameBtn = e.target.closest(".indexed-repo-name-btn");
-                if (nameBtn) {
-                    const targetRepo = nameBtn.getAttribute("data-repo");
-                    if (targetRepo && repoSelect) {
-                        repoSelect.value = targetRepo;
-                        localStorage.setItem("coderag_selected_repo", targetRepo);
-                        updateSelectedRepoUI();
-                        showToast(`Switched active repository to "${targetRepo}"`, "info", 1800);
-                    }
-                }
-            });
-        }
-
         // Chat Container Scroll Detection for Non-Intrusive Streaming
         if (chatContainer) {
             chatContainer.addEventListener("scroll", updateScrollState, { passive: true });
@@ -564,39 +725,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const val = repoSelect.value;
         if (val) {
             inputRepoLabel.textContent = val;
-            if (selectedRepoName) selectedRepoName.textContent = val;
-            if (repoMeta) repoMeta.style.display = "block";
             if (deleteRepoBtn) {
                 deleteRepoBtn.disabled = false;
                 deleteRepoBtn.title = `Delete repository: ${val}`;
             }
         } else {
             inputRepoLabel.textContent = "No Repo Selected";
-            if (repoMeta) repoMeta.style.display = "none";
             if (deleteRepoBtn) {
                 deleteRepoBtn.disabled = true;
                 deleteRepoBtn.title = "No repository selected";
             }
-        }
-
-        // Sync active state in indexedReposList
-        if (indexedReposList) {
-            indexedReposList.querySelectorAll(".indexed-repo-item").forEach(item => {
-                const btn = item.querySelector(".indexed-repo-name-btn");
-                const repo = btn ? btn.getAttribute("data-repo") : null;
-                if (repo === val) {
-                    item.classList.add("active");
-                    if (!item.querySelector(".indexed-repo-active-dot")) {
-                        const dot = document.createElement("span");
-                        dot.className = "indexed-repo-active-dot";
-                        btn.insertBefore(dot, btn.firstChild);
-                    }
-                } else {
-                    item.classList.remove("active");
-                    const dot = item.querySelector(".indexed-repo-active-dot");
-                    if (dot) dot.remove();
-                }
-            });
         }
     }
 
@@ -724,7 +862,6 @@ document.addEventListener("DOMContentLoaded", () => {
             if (res.ok) {
                 const data = await res.json();
                 repoSelect.innerHTML = "";
-                if (indexedReposList) indexedReposList.innerHTML = "";
 
                 if (data.repos && data.repos.length > 0) {
                     let hasSelected = false;
@@ -732,7 +869,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         const opt = document.createElement("option");
                         opt.value = r;
                         opt.textContent = r;
-                        const isSelected = (savedRepo && r === savedRepo) || (!savedRepo && idx === 0);
                         if (savedRepo && r === savedRepo) {
                             opt.selected = true;
                             hasSelected = true;
@@ -741,34 +877,12 @@ document.addEventListener("DOMContentLoaded", () => {
                             hasSelected = true;
                         }
                         repoSelect.appendChild(opt);
-
-                        // Populate indexed repository list item with instant delete button
-                        if (indexedReposList) {
-                            const item = document.createElement("div");
-                            item.className = `indexed-repo-item ${isSelected ? "active" : ""}`;
-                            item.innerHTML = `
-                                <button type="button" class="indexed-repo-name-btn" data-repo="${escapeHtml(r)}" title="Switch to ${escapeHtml(r)}">
-                                    ${isSelected ? '<span class="indexed-repo-active-dot"></span>' : ''}
-                                    <span>${escapeHtml(r)}</span>
-                                </button>
-                                <button type="button" class="btn-delete-repo-item" data-repo="${escapeHtml(r)}" title="Delete repository ${escapeHtml(r)}">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                    </svg>
-                                </button>
-                            `;
-                            indexedReposList.appendChild(item);
-                        }
                     });
                     if (!hasSelected && data.repos.length > 0) {
                         repoSelect.options[0].selected = true;
                     }
                 } else {
                     repoSelect.innerHTML = '<option value="">No repositories indexed</option>';
-                    if (indexedReposList) {
-                        indexedReposList.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); padding:4px 0;">No indexed repositories</div>';
-                    }
                 }
                 updateSelectedRepoUI();
             }
@@ -783,10 +897,27 @@ document.addEventListener("DOMContentLoaded", () => {
         const source = repoSourceInput.value.trim();
         if (!source) return;
 
-        ingestBtnText.textContent = "Indexing Code...";
+        // --- Progress animation ---
+        const steps = [
+            "Connecting to repository…",
+            "Cloning repository…",
+            "Parsing source files…",
+            "Building vector index…",
+            "Finalizing embeddings…"
+        ];
+        let stepIdx = 0;
+        ingestAlert.className = "alert-box info indexing-progress";
+        ingestAlert.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span><span class="progress-step-text">${steps[0]}</span>`;
+        ingestAlert.style.display = "block";
+
+        const progressInterval = setInterval(() => {
+            stepIdx = (stepIdx + 1) % steps.length;
+            ingestAlert.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span><span class="progress-step-text">${steps[stepIdx]}</span>`;
+        }, 2200);
+
+        ingestBtnText.textContent = "Indexing…";
         ingestSpinner.style.display = "inline-block";
         ingestBtn.disabled = true;
-        ingestAlert.style.display = "none";
 
         try {
             const res = await fetch("/api/index", {
@@ -798,20 +929,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 })
             });
             const data = await res.json();
+            clearInterval(progressInterval);
+
             if (res.ok) {
+                // Show success in-place with stats
                 ingestAlert.className = "alert-box success";
-                ingestAlert.textContent = `Successfully indexed ${data.total_chunks} chunks from ${data.total_files} files.`;
+                ingestAlert.innerHTML = `
+                    <strong>✅ Indexed successfully!</strong><br>
+                    <span style="font-size:0.82rem;opacity:0.9;">
+                        📁 ${data.total_files} files &nbsp;·&nbsp; 🧩 ${data.total_chunks} chunks &nbsp;·&nbsp; 📦 ${data.repo_name}
+                    </span>`;
                 ingestAlert.style.display = "block";
-                repoSourceInput.value = "";
+
+                // Save and update dropdown
                 localStorage.setItem("coderag_selected_repo", data.repo_id);
-                showToast(`Repository ${data.repo_name} indexed (${data.total_chunks} chunks)`, "success");
+                showToast(`✅ ${data.repo_name} indexed — ${data.total_chunks} chunks`, "success", 5000);
+
+                // Clear input after a short delay so user sees what was indexed
+                setTimeout(() => { repoSourceInput.value = ""; }, 1200);
+
                 await loadRepos();
+
+                // Auto-hide alert after 6 s
+                setTimeout(() => {
+                    ingestAlert.style.display = "none";
+                }, 6000);
             } else {
                 throw new Error(data.detail || "Indexing failed");
             }
         } catch (err) {
+            clearInterval(progressInterval);
             ingestAlert.className = "alert-box error";
-            ingestAlert.textContent = err.message;
+            ingestAlert.innerHTML = `<strong>❌ Error:</strong> ${escapeHtml(err.message)}`;
             ingestAlert.style.display = "block";
             showToast(err.message, "error");
         } finally {
@@ -883,6 +1032,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Reset autoscroll on new user message
         autoScrollEnabled = true;
 
+        let currentTurnId = "turn_" + Date.now() + "_" + Math.random().toString(36).substr(2, 6);
         let userMsgIndex;
         if (existingRowEl) {
             // Unmark queued state
@@ -890,10 +1040,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const qHeader = existingRowEl.querySelector(".msg-queued-header");
             if (qHeader) qHeader.remove();
             userMsgIndex = existingMsgIndex !== null ? existingMsgIndex : parseInt(existingRowEl.dataset.msgIndex || "0", 10);
+            if (existingRowEl.dataset.turnId) {
+                currentTurnId = existingRowEl.dataset.turnId;
+            } else {
+                existingRowEl.dataset.turnId = currentTurnId;
+            }
         } else {
-            // Persist User Message to conversation memory and append to UI
-            userMsgIndex = recordUserMessageInConversation(q);
-            appendMsg("user", q, userMsgIndex);
+            userMsgIndex = document.querySelectorAll(".msg-row.user").length;
+            appendMsg("user", q, userMsgIndex, currentTurnId);
             if (queryInput) {
                 queryInput.value = "";
                 queryInput.style.height = "auto";
@@ -908,7 +1062,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span class="spinner" style="border-color: rgba(99, 102, 241, 0.2); border-top-color: var(--primary-color);"></span>
                 <span class="stream-status">Analyzing intent & searching AST symbols...</span>
             </div>
-        `, userMsgIndex + 1);
+        `, userMsgIndex + 1, currentTurnId);
         const contentEl = botMsg.querySelector(".msg-bubble");
 
         isSubmitting = true;
@@ -930,7 +1084,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify({
                     repo_id: repo,
                     question: q,
-                    model_name: model
+                    model_name: model,
+                    conversation_id: activeConvId || null,
+                    turn_id: currentTurnId
                 })
             });
 
@@ -977,7 +1133,18 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (trimmed.startsWith("data: ")) {
                         try {
                             const data = JSON.parse(trimmed.slice(6));
-                            if (data.type === "trace") {
+                            if (data.type === "meta") {
+                                if (data.conversation_id) {
+                                    activeConvId = data.conversation_id;
+                                    localStorage.setItem("coderag_active_conv_id", activeConvId);
+                                }
+                                if (data.turn_id) {
+                                    currentTurnId = data.turn_id;
+                                    if (botMsg) botMsg.dataset.turnId = currentTurnId;
+                                    const userRow = chatContainer.querySelector(`.msg-row.user:last-of-type`);
+                                    if (userRow && !userRow.dataset.turnId) userRow.dataset.turnId = currentTurnId;
+                                }
+                            } else if (data.type === "trace") {
                                 const statusMsg = contentEl.querySelector(".stream-status");
                                 if (statusMsg) statusMsg.textContent = data.step;
                                 traceSteps.push(data.step);
@@ -993,6 +1160,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             } else if (data.type === "done") {
                                 sources = data.sources || [];
                                 if (data.trace_steps) traceSteps = data.trace_steps;
+                                fetchConversationsList();
                             } else if (data.type === "error") {
                                 throw new Error(data.error);
                             }
@@ -1017,11 +1185,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             renderExtras(contentEl, sources, traceSteps, currentAccumulatedAnswer, finalElapsedSec);
-
-            // Persist bot message to active conversation with generation time
-            if (currentAccumulatedAnswer) {
-                recordBotMessageInConversation(currentAccumulatedAnswer, sources, traceSteps, finalElapsedSec);
-            }
+            fetchConversationsList();
 
         } catch (err) {
             if (err.name === "AbortError" || controller.signal.aborted) {
@@ -1051,11 +1215,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================================================
     // Rendering & Helpers
     // =========================================================================
-    function appendMsg(type, textOrHtml, msgIndex = null) {
+    function appendMsg(type, textOrHtml, msgIndex = null, turnId = null) {
         const row = document.createElement("div");
         row.className = `msg-row ${type}`;
         if (msgIndex !== null && msgIndex !== undefined) {
             row.dataset.msgIndex = msgIndex;
+        }
+        if (turnId) {
+            row.dataset.turnId = turnId;
         }
 
         if (type === "user") {
@@ -1099,7 +1266,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (deleteBtn) {
                 deleteBtn.addEventListener("click", () => {
                     const currentIdx = row.dataset.msgIndex !== undefined ? parseInt(row.dataset.msgIndex, 10) : msgIndex;
-                    deleteQuestionAt(currentIdx, row);
+                    deleteTurnOrQuestion(row.dataset.turnId, currentIdx, row);
                 });
             }
 
@@ -1135,37 +1302,53 @@ document.addEventListener("DOMContentLoaded", () => {
         return row;
     }
 
-    function deleteQuestionAt(index, rowEl = null) {
+    async function deleteTurnOrQuestion(turnId, index, rowEl = null) {
         if (isSubmitting && currentAbortController) {
-            currentAbortController.abort();
-            currentAbortController = null;
-            isSubmitting = false;
-        }
-
-        let conv = conversations.find(c => c.id === activeConvId);
-        if (!conv || !conv.messages || index === null || index === undefined || index >= conv.messages.length) return;
-
-        // If next message is bot answer, delete both question and answer
-        const isNextBot = (index + 1 < conv.messages.length) && conv.messages[index + 1].type === "bot";
-        const deleteCount = isNextBot ? 2 : 1;
-
-        conv.messages.splice(index, deleteCount);
-        chatHistory = conv.messages;
-
-        // If conversation is now empty, update title
-        if (conv.messages.length === 0) {
-            conv.title = "New Chat";
-        } else {
-            const firstUser = conv.messages.find(m => m.type === "user");
-            if (firstUser) {
-                conv.title = firstUser.text.slice(0, 36) + (firstUser.text.length > 36 ? "..." : "");
+            if (currentBotRow && currentBotRow.dataset.turnId === turnId) {
+                currentAbortController.abort();
+                currentAbortController = null;
+                isSubmitting = false;
             }
         }
 
-        saveConversationsToMemory();
-        restoreActiveChatUI();
-        renderConversationsList();
-        showToast("Question deleted", "info", 2000);
+        if (activeConvId && turnId) {
+            try {
+                const res = await fetch(`/api/conversations/${encodeURIComponent(activeConvId)}/turns/${encodeURIComponent(turnId)}`, {
+                    method: "DELETE"
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    console.warn("Delete turn API returned error:", err);
+                }
+            } catch (apiErr) {
+                console.error("Failed to delete turn via API:", apiErr);
+            }
+        }
+
+        // Remove the user question element
+        if (rowEl) {
+            rowEl.remove();
+        }
+
+        // Also remove the corresponding bot answer element with matching turnId
+        if (turnId) {
+            const botEl = chatContainer.querySelector(`.msg-row.bot[data-turn-id="${turnId}"]`);
+            if (botEl) {
+                botEl.remove();
+            }
+        } else if (rowEl && rowEl.nextElementSibling && rowEl.nextElementSibling.classList.contains("bot")) {
+            rowEl.nextElementSibling.remove();
+        }
+
+        // If no messages left in chatContainer, show welcomeHero
+        const remainingMsgs = chatContainer.querySelectorAll(".msg-row");
+        if (remainingMsgs.length === 0 && welcomeHero) {
+            chatContainer.appendChild(welcomeHero);
+        }
+
+        updateScrollState();
+        await fetchConversationsList();
+        showToast("Question and corresponding AI answer deleted", "info", 2000);
     }
 
     function startInlineEdit(row, originalText, index) {
@@ -1215,7 +1398,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             editContainer.remove();
-            resubmitEditedQuestion(index, newText);
+            resubmitEditedQuestion(row, index, newText);
         };
 
         saveBtn.addEventListener("click", submitEdit);
@@ -1229,17 +1412,13 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    async function resubmitEditedQuestion(index, newText) {
-        let conv = conversations.find(c => c.id === activeConvId);
-        if (!conv || !conv.messages) return;
+    async function resubmitEditedQuestion(row, index, newText) {
+        if (row && row.dataset.turnId) {
+            await deleteTurnOrQuestion(row.dataset.turnId, index, row);
+        } else if (row) {
+            row.remove();
+        }
 
-        // Truncate from this user message index onward
-        conv.messages = conv.messages.slice(0, index);
-        chatHistory = conv.messages;
-        saveConversationsToMemory();
-        restoreActiveChatUI();
-
-        // Submit the new text
         if (queryInput) {
             queryInput.value = newText;
         }
@@ -1361,34 +1540,11 @@ document.addEventListener("DOMContentLoaded", () => {
         return "javascript";
     }
 
-    // Configure marked highlight parser for instant streaming highlights
+    // Configure marked options
     if (window.marked && typeof marked.setOptions === "function") {
-        marked.setOptions({
-            breaks: true,
-            gfm: true,
-            highlight: function(code, lang) {
-                if (window.Prism) {
-                    let grammarLang = (lang || "").toLowerCase().trim();
-                    if (!grammarLang || grammarLang === "code" || grammarLang === "text") {
-                        grammarLang = detectCodeLanguage(code);
-                    }
-                    if (grammarLang === "html" || grammarLang === "xml") grammarLang = "markup";
-                    if (grammarLang === "py") grammarLang = "python";
-                    if (grammarLang === "js") grammarLang = "javascript";
-                    if (grammarLang === "ts") grammarLang = "typescript";
-                    if (grammarLang === "sh") grammarLang = "bash";
-
-                    if (Prism.languages[grammarLang]) {
-                        try {
-                            return Prism.highlight(code, Prism.languages[grammarLang], grammarLang);
-                        } catch (e) {
-                            return code;
-                        }
-                    }
-                }
-                return code;
-            }
-        });
+        try {
+            marked.setOptions({ breaks: true, gfm: true });
+        } catch (e) { }
     }
 
     function enhanceCodeBlocks(container) {
@@ -1400,48 +1556,31 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             const codeEl = pre.querySelector("code");
-            let lang = "code";
+            let lang = "";
             if (codeEl) {
                 const match = codeEl.className.match(/language-([a-zA-Z0-9_-]+)/);
-                if (match && match[1] && match[1] !== "none" && match[1] !== "text" && match[1] !== "code") {
-                    lang = match[1].toLowerCase();
+                if (match && match[1]) {
+                    lang = match[1];
                 } else {
-                    const text = codeEl.textContent || "";
-                    lang = detectCodeLanguage(text);
-                }
-
-                if (lang === "html" || lang === "xml" || lang === "svg") {
-                    lang = "markup";
-                } else if (lang === "py") {
-                    lang = "python";
-                } else if (lang === "js") {
-                    lang = "javascript";
-                } else if (lang === "ts") {
-                    lang = "typescript";
-                } else if (lang === "sh") {
-                    lang = "bash";
-                }
-
-                codeEl.className = `language-${lang}`;
-                pre.className = `language-${lang}`;
-
-                if (window.Prism) {
-                    try {
-                        Prism.highlightElement(codeEl);
-                    } catch (e) {
-                        console.debug("Prism highlightElement error:", e);
+                    const detected = detectCodeLanguage(codeEl.textContent || "");
+                    if (detected) {
+                        lang = detected;
+                        codeEl.classList.add(`language-${detected}`);
+                    } else {
+                        lang = "code";
                     }
                 }
+            } else {
+                lang = detectCodeLanguage(pre.textContent || "") || "code";
             }
 
             const wrapper = document.createElement("div");
             wrapper.className = "code-block-wrapper";
 
-            const displayLang = lang === "markup" ? "html" : lang;
             const header = document.createElement("div");
             header.className = "code-block-header";
             header.innerHTML = `
-                <span class="code-lang-label">${escapeHtml(displayLang)}</span>
+                <span class="code-lang-label">${escapeHtml(lang)}</span>
                 <div class="code-block-actions">
                     <button type="button" class="btn-code-action btn-copy-code" title="Copy code">
                         <svg class="action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1479,7 +1618,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!codeEl) return;
 
             const codeText = codeEl.innerText || codeEl.textContent || "";
-            
+
             try {
                 await navigator.clipboard.writeText(codeText);
                 copyBtn.classList.add("copied");
@@ -1569,7 +1708,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (window.Prism) {
             try {
                 Prism.highlightAllUnder(element);
-            } catch (e) {}
+            } catch (e) { }
         }
     }
 
@@ -1583,7 +1722,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (window.Prism) {
             try {
                 Prism.highlightAllUnder(element);
-            } catch (e) {}
+            } catch (e) { }
         }
     }
 
@@ -1592,7 +1731,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (text && text.trim()) {
             const actionsDiv = document.createElement("div");
             actionsDiv.className = "msg-actions-bar";
-            
+
             const copyBtn = document.createElement("button");
             copyBtn.type = "button";
             copyBtn.className = "btn-copy-msg";
@@ -1652,7 +1791,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (traceSteps && traceSteps.length > 0) {
             const traceSec = document.createElement("div");
             traceSec.className = "trace-wrapper";
-            
+
             const btn = document.createElement("button");
             btn.className = "trace-toggle-btn";
             btn.innerHTML = `
@@ -1674,7 +1813,7 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.addEventListener("click", () => {
                 const isHidden = panel.style.display === "none";
                 panel.style.display = isHidden ? "flex" : "none";
-                btn.innerHTML = isHidden 
+                btn.innerHTML = isHidden
                     ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg><span>Execution Trace (${traceSteps.length} steps)</span>`
                     : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg><span>Execution Trace (${traceSteps.length} steps)</span>`;
             });

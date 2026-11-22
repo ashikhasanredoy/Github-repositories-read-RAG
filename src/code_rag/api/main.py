@@ -1,3 +1,4 @@
+import time
 import json
 import asyncio
 import logging
@@ -10,7 +11,11 @@ from src.code_rag.config import settings
 from src.code_rag.api.schemas import (
     IndexRepoRequest, IndexRepoResponse,
     QueryRequest, QueryResponse, SourceCitation,
-    RepoListResponse, DeleteRepoResponse
+    RepoListResponse, DeleteRepoResponse,
+    ConversationSummary, ConversationListResponse,
+    ChatMessage, ConversationDetailResponse,
+    ConversationMessagesResponse, RenameConversationRequest,
+    DeleteTurnResponse, DeleteConversationResponse
 )
 from src.code_rag.core.cloner import RepoCloner
 from src.code_rag.core.parser import CodeParser
@@ -18,6 +23,7 @@ from src.code_rag.core.chunker import CodeChunker
 from src.code_rag.services.ollama import OllamaService
 from src.code_rag.storage.vector_store import VectorStore
 from src.code_rag.storage.bm25_store import BM25Store
+from src.code_rag.storage.sqlite_store import SQLiteStore
 from src.code_rag.rag.retriever import HybridRetriever
 from src.code_rag.rag.graph import CodeRAGGraph
 
@@ -49,6 +55,7 @@ parser = CodeParser()
 chunker = CodeChunker(parser=parser)
 vector_store = VectorStore(ollama_service=ollama_service)
 bm25_store = BM25Store()
+sqlite_store = SQLiteStore()
 retriever = HybridRetriever(vector_store=vector_store, bm25_store=bm25_store, cloner=cloner)
 rag_graph = CodeRAGGraph(retriever=retriever, ollama_service=ollama_service)
 rag_pipeline = rag_graph.build()
@@ -122,16 +129,157 @@ async def index_repository(req: IndexRepoRequest):
         logger.error("Error during repository indexing: %s", err)
         raise HTTPException(status_code=500, detail=str(err))
 
+# -------------------------------------------------------------
+# Conversation Management APIs
+# -------------------------------------------------------------
+
+@app.get("/api/conversations", response_model=ConversationListResponse, tags=["Conversations"])
+async def list_conversations():
+    convs = await asyncio.to_thread(sqlite_store.list_conversations)
+    return ConversationListResponse(
+        conversations=[
+            ConversationSummary(
+                conversation_id=c["conversation_id"],
+                title=c["title"],
+                repo_id=c.get("repo_id", ""),
+                created_at=c["created_at"],
+                updated_at=c["updated_at"],
+                turn_count=c.get("turn_count", 0)
+            )
+            for c in convs
+        ],
+        count=len(convs)
+    )
+
+@app.get("/api/conversations/{conversation_id}", response_model=ConversationDetailResponse, tags=["Conversations"])
+async def get_conversation(conversation_id: str):
+    conv = await asyncio.to_thread(sqlite_store.get_conversation, conversation_id)
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Conversation '{conversation_id}' not found")
+
+    messages = [
+        ChatMessage(
+            message_id=m["message_id"],
+            conversation_id=m["conversation_id"],
+            turn_id=m["turn_id"],
+            role=m["role"],
+            content=m["content"],
+            model_name=m.get("model_name"),
+            query_intent=m.get("query_intent"),
+            sources=m.get("sources"),
+            status=m["status"],
+            created_at=m["created_at"]
+        )
+        for m in conv.get("messages", [])
+    ]
+    return ConversationDetailResponse(
+        conversation_id=conv["conversation_id"],
+        title=conv["title"],
+        repo_id=conv.get("repo_id", ""),
+        created_at=conv["created_at"],
+        updated_at=conv["updated_at"],
+        messages=messages
+    )
+
+@app.get("/api/conversations/{conversation_id}/messages", response_model=ConversationMessagesResponse, tags=["Conversations"])
+async def get_conversation_messages(conversation_id: str):
+    raw_messages = await asyncio.to_thread(sqlite_store.get_messages, conversation_id)
+    messages = [
+        ChatMessage(
+            message_id=m["message_id"],
+            conversation_id=m["conversation_id"],
+            turn_id=m["turn_id"],
+            role=m["role"],
+            content=m["content"],
+            model_name=m.get("model_name"),
+            query_intent=m.get("query_intent"),
+            sources=m.get("sources"),
+            status=m["status"],
+            created_at=m["created_at"]
+        )
+        for m in raw_messages
+    ]
+    return ConversationMessagesResponse(
+        conversation_id=conversation_id,
+        messages=messages,
+        count=len(messages)
+    )
+
+@app.delete("/api/conversations/{conversation_id}/turns/{turn_id}", response_model=DeleteTurnResponse, tags=["Conversations"])
+async def delete_turn(conversation_id: str, turn_id: str):
+    success, deleted_count = await asyncio.to_thread(sqlite_store.delete_turn, conversation_id, turn_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Turn '{turn_id}' not found in conversation '{conversation_id}'."
+        )
+    return DeleteTurnResponse(
+        success=True,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+        deleted_messages=deleted_count,
+        message="Question and corresponding AI answer deleted successfully."
+    )
+
+@app.delete("/api/conversations/{conversation_id}", response_model=DeleteConversationResponse, tags=["Conversations"])
+async def delete_conversation(conversation_id: str):
+    success = await asyncio.to_thread(sqlite_store.delete_conversation, conversation_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Conversation '{conversation_id}' not found."
+        )
+    return DeleteConversationResponse(
+        success=True,
+        conversation_id=conversation_id,
+        message=f"Conversation '{conversation_id}' and all its turns were deleted successfully."
+    )
+
+@app.patch("/api/conversations/{conversation_id}", response_model=ConversationSummary, tags=["Conversations"])
+async def rename_conversation(conversation_id: str, req: RenameConversationRequest):
+    success = await asyncio.to_thread(sqlite_store.rename_conversation, conversation_id, req.title)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Conversation '{conversation_id}' not found."
+        )
+    conv = await asyncio.to_thread(sqlite_store.get_conversation, conversation_id)
+    return ConversationSummary(
+        conversation_id=conv["conversation_id"],
+        title=conv["title"],
+        repo_id=conv.get("repo_id", ""),
+        created_at=conv["created_at"],
+        updated_at=conv["updated_at"]
+    )
+
+# -------------------------------------------------------------
+# Query Execution & Real-Time SSE Streaming
+# -------------------------------------------------------------
+
 @app.post("/api/query", response_model=QueryResponse, tags=["Query"])
 async def query_repository(req: QueryRequest):
     try:
         if req.model_name:
             ollama_service.set_model(req.model_name)
 
+        conv_id = req.conversation_id or f"conv_{int(time.time() * 1000)}"
+        turn_id = req.turn_id or f"turn_{int(time.time() * 1000)}"
+
+        # 1-7. Save question & create turn in SQLite3
+        await asyncio.to_thread(sqlite_store.create_or_get_conversation, conv_id, repo_id=req.repo_id)
+        await asyncio.to_thread(sqlite_store.create_turn, conv_id, turn_id)
+        await asyncio.to_thread(sqlite_store.add_user_message, conv_id, turn_id, req.question)
+        await asyncio.to_thread(
+            sqlite_store.create_pending_assistant_message,
+            conv_id, turn_id, model_name=req.model_name or ollama_service.get_active_model()
+        )
+
         initial_state = {
             "question": req.question,
             "original_question": req.question,
             "repo_id": req.repo_id,
+            "conversation_id": conv_id,
+            "turn_id": turn_id,
             "query_intent": "code_explanation",
             "extracted_entities": [],
             "retrieved_docs": [],
@@ -159,13 +307,28 @@ async def query_repository(req: QueryRequest):
             for s in result.get("sources", [])
         ]
 
+        citations_dicts = [c.model_dump() for c in citations]
+        # Update assistant message in SQLite3 (only if turn still exists)
+        await asyncio.to_thread(
+            sqlite_store.update_assistant_message,
+            conv_id,
+            turn_id,
+            content=result.get("answer", ""),
+            sources=citations_dicts,
+            status="completed",
+            query_intent=result.get("query_intent", "code_explanation"),
+            model_name=req.model_name or ollama_service.get_active_model()
+        )
+
         return QueryResponse(
             repo_id=req.repo_id,
             question=req.question,
             query_intent=result.get("query_intent", "code_explanation"),
             answer=result.get("answer", ""),
             sources=citations,
-            trace_steps=result.get("trace_steps", [])
+            trace_steps=result.get("trace_steps", []),
+            conversation_id=conv_id,
+            turn_id=turn_id
         )
     except Exception as err:
         logger.error("Query execution error: %s", err)
@@ -176,10 +339,24 @@ async def query_repository_stream(req: QueryRequest):
     if req.model_name:
         ollama_service.set_model(req.model_name)
 
+    conv_id = req.conversation_id or f"conv_{int(time.time() * 1000)}"
+    turn_id = req.turn_id or f"turn_{int(time.time() * 1000)}"
+
+    # 1. Save question & pending assistant message before streaming
+    await asyncio.to_thread(sqlite_store.create_or_get_conversation, conv_id, repo_id=req.repo_id)
+    await asyncio.to_thread(sqlite_store.create_turn, conv_id, turn_id)
+    await asyncio.to_thread(sqlite_store.add_user_message, conv_id, turn_id, req.question)
+    await asyncio.to_thread(
+        sqlite_store.create_pending_assistant_message,
+        conv_id, turn_id, model_name=req.model_name or ollama_service.get_active_model()
+    )
+
     initial_state = {
         "question": req.question,
         "original_question": req.question,
         "repo_id": req.repo_id,
+        "conversation_id": conv_id,
+        "turn_id": turn_id,
         "query_intent": "code_explanation",
         "extracted_entities": [],
         "retrieved_docs": [],
@@ -192,14 +369,65 @@ async def query_repository_stream(req: QueryRequest):
     }
 
     async def event_stream():
+        accumulated_answer = []
+        sources = []
+        query_intent = "code_explanation"
+        stream_completed_normally = False
+
         try:
+            # Send meta event so client immediately receives conversation_id and turn_id
+            yield f"data: {json.dumps({'type': 'meta', 'conversation_id': conv_id, 'turn_id': turn_id})}\n\n"
+
             async for item in rag_graph.stream_rag_async(initial_state):
+                if item.get("type") == "token":
+                    accumulated_answer.append(item.get("content", ""))
+                elif item.get("type") == "done":
+                    sources = item.get("sources", [])
+                    query_intent = item.get("query_intent", query_intent)
+                    item["conversation_id"] = conv_id
+                    item["turn_id"] = turn_id
+                    stream_completed_normally = True
+
                 yield f"data: {json.dumps(item)}\n\n"
+
+            if stream_completed_normally:
+                full_answer = "".join(accumulated_answer)
+                # Save completed response to existing assistant message (safe against deletion)
+                await asyncio.to_thread(
+                    sqlite_store.update_assistant_message,
+                    conv_id,
+                    turn_id,
+                    content=full_answer,
+                    sources=sources,
+                    status="completed",
+                    query_intent=query_intent,
+                    model_name=req.model_name or ollama_service.get_active_model()
+                )
         except (asyncio.CancelledError, GeneratorExit):
-            logger.info("Stream cancelled/aborted by client.")
+            logger.info("Stream cancelled/aborted for turn %s in conv %s.", turn_id, conv_id)
+            partial_answer = "".join(accumulated_answer)
+            await asyncio.to_thread(
+                sqlite_store.update_assistant_message,
+                conv_id,
+                turn_id,
+                content=partial_answer,
+                sources=sources,
+                status="interrupted",
+                query_intent=query_intent,
+                model_name=req.model_name or ollama_service.get_active_model()
+            )
             return
         except Exception as err:
-            logger.error("Streaming error: %s", err)
+            logger.error("Streaming error for turn %s: %s", turn_id, err)
+            await asyncio.to_thread(
+                sqlite_store.update_assistant_message,
+                conv_id,
+                turn_id,
+                content="".join(accumulated_answer),
+                sources=[],
+                status="failed",
+                model_name=req.model_name or ollama_service.get_active_model()
+            )
             yield f"data: {json.dumps({'type': 'error', 'error': str(err)})}\n\n"
 
     return StreamingResponse(
@@ -235,4 +463,3 @@ async def delete_repository(repo_id: str):
     except Exception as err:
         logger.error("Error deleting repository %s: %s", repo_id, err)
         raise HTTPException(status_code=500, detail=str(err))
-

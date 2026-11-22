@@ -549,7 +549,8 @@ User Question: {question}
         yield {
             "type": "done",
             "sources": sources,
-            "trace_steps": state["trace_steps"]
+            "trace_steps": state["trace_steps"],
+            "query_intent": state.get("query_intent", "code_explanation")
         }
 
     async def stream_rag_async(self, initial_state: CodeRAGState):
@@ -688,5 +689,6 @@ User Question: {question}
         yield {
             "type": "done",
             "sources": sources,
-            "trace_steps": state["trace_steps"]
+            "trace_steps": state["trace_steps"],
+            "query_intent": state.get("query_intent", "code_explanation")
         }
