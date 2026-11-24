@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="/static/styles.css?v=42.0">
+    <link rel="stylesheet" href="/static/styles.css?v=46.0">
 </head>
 <body>
     <div class="app-container">
@@ -130,6 +130,9 @@
                 </div>
             </div>
         </aside>
+
+        <!-- Mobile Sidebar Backdrop Overlay -->
+        <div id="sidebarBackdrop" class="sidebar-backdrop" title="Click to close sidebar"></div>
 
         <!-- Main Chat Area -->
         <main class="main-content">
@@ -276,6 +279,46 @@
         </div>
     </div>
 
+    <!-- Dedicated Beautiful Error Modal Dialog -->
+    <div id="errorModalOverlay" class="custom-modal-overlay error-modal-overlay" style="display: none;">
+        <div class="custom-modal-card error-modal-card" role="dialog" aria-modal="true">
+            <button type="button" class="custom-modal-close" id="errorModalCloseBtn" aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <div class="custom-modal-icon-wrap error-icon-wrap" id="errorModalIconWrap">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+            </div>
+            <div class="custom-modal-body">
+                <h3 class="custom-modal-title" id="errorModalTitle">Invalid Repository URL</h3>
+                <div class="error-modal-lines">
+                    <p class="error-modal-line error-line-main" id="errorModalLine1">The repository link you provided cannot be indexed.</p>
+                    <p class="error-modal-line error-line-sub" id="errorModalLine2">Please provide a clean GitHub repository root URL without query parameters or extra text.</p>
+                </div>
+                <div class="error-modal-details">
+                    <div class="error-url-preview bad">
+                        <span class="error-url-label">❌ What is wrong (You entered):</span>
+                        <code id="errorModalEnteredUrl">https://github.com/...</code>
+                    </div>
+                    <div class="error-url-preview good">
+                        <span class="error-url-label">✅ Expected clean format:</span>
+                        <code>https://github.com/owner/repository</code>
+                    </div>
+                </div>
+            </div>
+            <div class="custom-modal-footer error-modal-footer">
+                <button type="button" class="btn-modal btn-modal-secondary" id="errorModalGuideBtn">View Guide</button>
+                <button type="button" class="btn-modal btn-modal-confirm danger" id="errorModalFixBtn">Fix URL</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Project Guide / How It Works Modal -->
     <div id="guideModalOverlay" class="guide-modal-overlay" style="display: none;">
         <div class="guide-modal-card" role="dialog" aria-modal="true">
@@ -313,14 +356,127 @@
                 </div>
                 <div class="guide-nav-tabs">
                     <button type="button" class="guide-tab-btn active" data-guide-tab="all">All Topics</button>
-                    <button type="button" class="guide-tab-btn" data-guide-tab="prompts">Prompt Guide & Try-It</button>
+                    <button type="button" class="guide-tab-btn guide-tab-warning" data-guide-tab="warnings">⚠️ Warnings &amp; Troubleshooting</button>
+                    <button type="button" class="guide-tab-btn" data-guide-tab="prompts">Prompt Guide &amp; Try-It</button>
                     <button type="button" class="guide-tab-btn" data-guide-tab="export">Code Export Mode</button>
-                    <button type="button" class="guide-tab-btn" data-guide-tab="architecture">Architecture & RAG</button>
+                    <button type="button" class="guide-tab-btn" data-guide-tab="architecture">Architecture &amp; RAG</button>
                     <button type="button" class="guide-tab-btn" data-guide-tab="shortcuts">Shortcuts</button>
                 </div>
             </div>
 
             <div class="guide-modal-content" id="guideModalContent">
+                <!-- 0. Critical System Warnings & Failure Prevention Analysis -->
+                <div class="guide-section guide-section-warning" data-guide-cat="warnings architecture">
+                    <h3 class="guide-section-title warning-title">
+                        <span class="guide-step-tag warning-tag">⚠️</span>
+                        Important System Warnings &amp; Failure Prevention
+                    </h3>
+
+                    <!-- Root Cause Failure: Clean GitHub URL Requirement -->
+                    <div class="guide-card guide-card-danger">
+                        <div class="guide-card-header-badge">
+                            <span class="guide-badge-danger">CRITICAL REQUIREMENT</span>
+                            <span class="guide-badge-sub">Vector Database Indexing Prerequisite</span>
+                        </div>
+                        <h4>1. Always Provide a Clean GitHub Repository Root URL</h4>
+                        <p>
+                            When indexing a repository, you <strong>must provide a clean repository root URL</strong>.
+                            Do not append subpaths, file view links, branches, or external domains (e.g. <code>/chatgpt.com</code>, <code>/tree/main/...</code>, <code>/blob/master/...</code>).
+                            Doing so breaks Git clone, which causes <strong>AST symbol parsing to fail, leaving ChromaDB (vector database) and BM25Plus (keyword search) completely unindexed</strong>!
+                        </p>
+
+                        <div class="guide-url-comparison">
+                            <div class="guide-url-box good">
+                                <div class="guide-url-label">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <strong>CORRECT: Clean Repository Root URL</strong>
+                                </div>
+                                <div class="guide-url-code-wrapper">
+                                    <code>https://github.com/ashikhasanredoy/Github-repositories-read-RAG</code>
+                                    <code>https://github.com/ashikhasanredoy/Github-repositories-read-RAG.git</code>
+                                </div>
+                                <span class="guide-url-note">✓ Clones the root codebase cleanly. Enables complete AST symbol parsing, ChromaDB vectorization, and BM25 keyword index construction.</span>
+                            </div>
+
+                            <div class="guide-url-box bad">
+                                <div class="guide-url-label">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    <strong>INCORRECT: URLs with Appended Paths or External Domains</strong>
+                                </div>
+                                <div class="guide-url-code-wrapper">
+                                    <code>https://github.com/ashikhasanredoy/Github-repositories-read-RAG/chatgpt.com</code>
+                                    <code>https://github.com/ashikhasanredoy/Github-repositories-read-RAG/tree/main/src</code>
+                                    <code>https://github.com/ashikhasanredoy/Github-repositories-read-RAG/blob/main/README.md</code>
+                                </div>
+                                <span class="guide-url-note">✗ <strong>Why this fails:</strong> Git cannot resolve non-existent subpaths or concatenated URLs. The indexer receives 0 files, ChromaDB remains completely empty, and all AI queries will report <em>"Repository not indexed"</em> or fail.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comprehensive Failure Modes Grid -->
+                    <div class="guide-grid">
+                        <!-- Failure Mode 2: Ollama Service & Models -->
+                        <div class="guide-card guide-card-warning">
+                            <h4>2. Ollama Service or Required Models Missing</h4>
+                            <p><strong>Failure Symptom:</strong> Connection Refused (<code>ECONNREFUSED</code>), HTTP 500, or Model Not Found errors during ingestion or chat streaming.</p>
+                            <ul class="guide-bullet-list">
+                                <li><strong>Ollama Daemon Offline:</strong> Ollama must be running locally on <code>http://localhost:11434</code> (run <code>ollama serve</code>).</li>
+                                <li><strong>Missing Embedding Model:</strong> Ingestion requires <code>nomic-embed-text</code>. Run <code>ollama pull nomic-embed-text</code> before indexing.</li>
+                                <li><strong>Missing Generation LLM:</strong> Query answering requires <code>llama3.2:latest</code> (or the LLM configured in <code>config.py</code>). Run <code>ollama pull llama3.2:latest</code>.</li>
+                            </ul>
+                        </div>
+
+                        <!-- Failure Mode 3: Private Repositories & SSH Credentials -->
+                        <div class="guide-card guide-card-warning">
+                            <h4>3. Private Repositories &amp; Authentication</h4>
+                            <p><strong>Failure Symptom:</strong> <code>GitCommandError: repository not found or authentication failed</code>.</p>
+                            <p>Anonymous HTTPS clones only succeed for public repositories. For private repositories:</p>
+                            <ul class="guide-bullet-list">
+                                <li>Use an authenticated token in the URL: <code>https://&lt;GITHUB_TOKEN&gt;@github.com/user/private-repo.git</code></li>
+                                <li>Or use an SSH URL (<code>git@github.com:user/private-repo.git</code>) if your local machine has SSH keys configured.</li>
+                            </ul>
+                        </div>
+
+                        <!-- Failure Mode 4: Non-Code Repositories, Media & Binary Exclusions -->
+                        <div class="guide-card guide-card-warning">
+                            <h4>4. Binary &amp; Media Files Are Not Code</h4>
+                            <p><strong>Failure Symptom:</strong> <em>"No eligible code files found in repository"</em>.</p>
+                            <p>The system is an intelligent <strong>Code RAG</strong>. To preserve performance and token budget:</p>
+                            <ul class="guide-bullet-list">
+                                <li>Images (<code>.png</code>, <code>.jpg</code>, <code>.svg</code>), media (<code>.mp4</code>, <code>.mp3</code>), PDFs, archives (<code>.zip</code>, <code>.tar</code>), and compiled binaries (<code>.exe</code>, <code>.so</code>) are automatically skipped.</li>
+                                <li>If a repository contains <em>only</em> media assets and no code (Python, JS, TS, HTML, Go, Rust, Java, etc.), 0 AST chunks are generated, leaving the vector database empty.</li>
+                            </ul>
+                        </div>
+
+                        <!-- Failure Mode 5: Files > 1MB & Monolithic Codebases -->
+                        <div class="guide-card guide-card-warning">
+                            <h4>5. File Size Limit (1MB) &amp; Huge Codebases</h4>
+                            <p><strong>Failure Symptom:</strong> Specific files missing from retrieval or slow initial indexing.</p>
+                            <ul class="guide-bullet-list">
+                                <li><strong>1MB Individual File Limit:</strong> Single files exceeding 1MB (1,048,576 bytes), minified bundles, or large SQL dumps are skipped to prevent memory overflow.</li>
+                                <li><strong>Large Dependency Directories:</strong> Ensure <code>node_modules/</code>, <code>.venv/</code>, and build caches are not indexed.</li>
+                            </ul>
+                        </div>
+
+                        <!-- Failure Mode 6: Hardware Resource Exhaustion (RAM/VRAM) -->
+                        <div class="guide-card guide-card-warning">
+                            <h4>6. Hardware Memory / VRAM Starvation</h4>
+                            <p><strong>Failure Symptom:</strong> Ollama crashes mid-stream, OS kills process (OOM), or request timeouts.</p>
+                            <ul class="guide-bullet-list">
+                                <li>Embedding generation and 8B+ LLM inference require adequate RAM (minimum 8GB, 16GB+ recommended).</li>
+                                <li>If running other heavy background processes, Ollama might fail to allocate GPU layers. Restart Ollama or use quantized models if memory is constrained.</li>
+                            </ul>
+                        </div>
+
+                        <!-- Failure Mode 7: Zero-Hallucination Fallback (Grounding Protection) -->
+                        <div class="guide-card guide-card-warning">
+                            <h4>7. Zero-Hallucination Fallback (Normal Behavior)</h4>
+                            <p><strong>Notice:</strong> If the AI responds with <em>"I couldn't find sufficient information in the indexed repository..."</em>, this is <strong>not a failure</strong>.</p>
+                            <p>The RAG pipeline enforces strict grounding verification. If your query asks about features or files that do not exist in the codebase, the AI intentionally refuses to invent hallucinations.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 1. Complete Repository Code Export Mode -->
                 <div class="guide-section" data-guide-cat="export prompts">
                     <h3 class="guide-section-title">
@@ -573,6 +729,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
-    <script src="/static/app.js?v=42.0"></script>
+    <script src="/static/app.js?v=46.0"></script>
 </body>
 </html>

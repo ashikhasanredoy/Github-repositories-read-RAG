@@ -1,7 +1,5 @@
-import os
 import json
 import logging
-import concurrent.futures
 from typing import List, Optional
 import httpx
 from src.code_rag.config import settings

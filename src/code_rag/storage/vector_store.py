@@ -1,4 +1,5 @@
 import logging
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import chromadb
@@ -17,6 +18,8 @@ class VectorStore:
         self.persist_dir = str(persist_dir or settings.CHROMA_DIR)
         self.client = chromadb.PersistentClient(path=self.persist_dir)
         self.ollama = ollama_service or OllamaService()
+        self._collections: Dict[str, Any] = {}
+        self._coll_lock = threading.Lock()
 
     @staticmethod
     def _sanitize_collection_name(repo_id: str) -> str:
@@ -35,6 +38,8 @@ class VectorStore:
             name=coll_name,
             metadata={"hnsw:space": "cosine", "repo_id": repo_id.lower()}
         )
+        with self._coll_lock:
+            self._collections[coll_name] = collection
 
         texts = [c.formatted_content for c in chunks]
         metas = [c.to_metadata() for c in chunks]
@@ -54,10 +59,15 @@ class VectorStore:
 
     def search(self, repo_id: str, query: str, top_k: int = settings.VECTOR_TOP_K) -> List[Dict[str, Any]]:
         coll_name = self._sanitize_collection_name(repo_id)
-        try:
-            collection = self.client.get_collection(name=coll_name)
-        except Exception:
-            return []
+        with self._coll_lock:
+            collection = self._collections.get(coll_name)
+        if collection is None:
+            try:
+                collection = self.client.get_collection(name=coll_name)
+                with self._coll_lock:
+                    self._collections[coll_name] = collection
+            except Exception:
+                return []
 
         try:
             query_vector = self.ollama.embed_query(query)
@@ -115,6 +125,8 @@ class VectorStore:
 
     def delete_repo(self, repo_id: str) -> bool:
         coll_name = self._sanitize_collection_name(repo_id)
+        with self._coll_lock:
+            self._collections.pop(coll_name, None)
         try:
             self.client.delete_collection(name=coll_name)
             logger.info("Successfully deleted vector collection: %s", coll_name)

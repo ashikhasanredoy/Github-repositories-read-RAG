@@ -1,4 +1,3 @@
-import os
 import json
 import sqlite3
 import logging
@@ -28,14 +27,13 @@ class SQLiteStore:
     def get_connection(self):
         conn = sqlite3.connect(
             str(self.db_path),
-            timeout=10.0,
+            timeout=30.0,
             check_same_thread=False
         )
         conn.row_factory = sqlite3.Row
         try:
             conn.execute("PRAGMA foreign_keys = ON;")
-            conn.execute("PRAGMA journal_mode = WAL;")
-            conn.execute("PRAGMA busy_timeout = 5000;")
+            conn.execute("PRAGMA busy_timeout = 30000;")
             yield conn
         finally:
             conn.close()
@@ -43,6 +41,9 @@ class SQLiteStore:
     def init_db(self):
         with self.get_connection() as conn:
             with conn:
+                conn.execute("PRAGMA journal_mode = WAL;")
+                conn.execute("PRAGMA synchronous = NORMAL;")
+                conn.execute("PRAGMA busy_timeout = 30000;")
                 conn.execute("""
                 CREATE TABLE IF NOT EXISTS conversations (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +104,9 @@ class SQLiteStore:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at DESC);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_conv ON turns(conversation_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages(conversation_id, created_at ASC, id ASC);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_turn ON messages(turn_id);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_export_sessions_conv ON export_sessions(conversation_id);")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_export_sessions_conv_repo ON export_sessions(conversation_id, repo_id);")
         logger.info("SQLite chat history initialized at %s", self.db_path)
 
@@ -165,7 +168,12 @@ class SQLiteStore:
             rows = cursor.fetchall()
             return [dict(r) for r in rows]
 
-    def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+    def get_conversation(
+        self,
+        conversation_id: str,
+        limit: Optional[int] = None,
+        offset: int = 0
+    ) -> Optional[Dict[str, Any]]:
         with self.get_connection() as conn:
             c_cursor = conn.execute(
                 "SELECT conversation_id, title, repo_id, created_at, updated_at FROM conversations WHERE conversation_id = ?",
@@ -176,15 +184,27 @@ class SQLiteStore:
                 return None
 
             conv = dict(c_row)
-            m_cursor = conn.execute(
-                """
-                SELECT message_id, conversation_id, turn_id, role, content, model_name, query_intent, sources, status, created_at
-                FROM messages
-                WHERE conversation_id = ?
-                ORDER BY created_at ASC, id ASC
-                """,
-                (conversation_id,)
-            )
+            if limit is not None:
+                m_cursor = conn.execute(
+                    """
+                    SELECT message_id, conversation_id, turn_id, role, content, model_name, query_intent, sources, status, created_at
+                    FROM messages
+                    WHERE conversation_id = ?
+                    ORDER BY created_at ASC, id ASC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (conversation_id, limit, offset)
+                )
+            else:
+                m_cursor = conn.execute(
+                    """
+                    SELECT message_id, conversation_id, turn_id, role, content, model_name, query_intent, sources, status, created_at
+                    FROM messages
+                    WHERE conversation_id = ?
+                    ORDER BY created_at ASC, id ASC
+                    """,
+                    (conversation_id,)
+                )
             messages = []
             for mr in m_cursor.fetchall():
                 m_dict = dict(mr)

@@ -1,8 +1,9 @@
 import re
 import pickle
 import logging
+import threading
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from rank_bm25 import BM25Plus
 from src.code_rag.config import settings
 from src.code_rag.core.models import CodeChunk
@@ -17,6 +18,8 @@ class BM25Store:
     def __init__(self, storage_dir: Optional[Path] = None):
         self.storage_dir = storage_dir or settings.BM25_DIR
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self._cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._cache_lock = threading.Lock()
 
     @staticmethod
     def tokenize(text: str) -> List[str]:
@@ -49,16 +52,32 @@ class BM25Store:
         clean_id = repo_id.lower()
         save_path = self.storage_dir / f"{clean_id}.pkl"
         save_path.write_bytes(pickle.dumps(payload))
+        with self._cache_lock:
+            try:
+                mtime = save_path.stat().st_mtime
+                self._cache[clean_id] = (mtime, payload)
+            except Exception:
+                self._cache.pop(clean_id, None)
         return True
 
     def search(self, repo_id: str, query: str, top_k: int = settings.BM25_TOP_K) -> List[Dict[str, Any]]:
         clean_id = repo_id.lower()
         index_file = self.storage_dir / f"{clean_id}.pkl"
         if not index_file.exists():
+            with self._cache_lock:
+                self._cache.pop(clean_id, None)
             return []
 
         try:
-            data = pickle.loads(index_file.read_bytes())
+            mtime = index_file.stat().st_mtime
+            with self._cache_lock:
+                cached = self._cache.get(clean_id)
+                data = cached[1] if cached and cached[0] == mtime else None
+
+            if data is None:
+                data = pickle.loads(index_file.read_bytes())
+                with self._cache_lock:
+                    self._cache[clean_id] = (mtime, data)
         except Exception as err:
             logger.error("Failed to load BM25 index for repo '%s': %s", repo_id, err)
             return []
@@ -89,6 +108,8 @@ class BM25Store:
 
     def delete_repo(self, repo_id: str) -> bool:
         clean_id = repo_id.lower()
+        with self._cache_lock:
+            self._cache.pop(clean_id, None)
         save_path = self.storage_dir / f"{clean_id}.pkl"
         if save_path.exists():
             try:

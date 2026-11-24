@@ -301,3 +301,92 @@ def test_stream_rag_async_repository_code_export(temp_sample_repo):
     # 4. Strict media exclusion
     assert "logo.png" not in full_output
     assert "sound.mp3" not in full_output
+
+
+def test_format_export_progress_footer():
+    """Verify export progress footer outputs interactive Next and All Files buttons without legacy text."""
+    from src.code_rag.rag.export_mode import format_export_progress_footer
+
+    footer = format_export_progress_footer(5, 20, next_batch_size=5)
+    # Must have the Next button
+    assert "btn-export-next" in footer
+    assert "Next (5 Files)" in footer
+    # Must have the All Files button
+    assert "btn-export-all" in footer
+    assert "All Files (15 Remaining)" in footer
+    # Must not contain the removed phrase
+    assert "Baki code dao" not in footer
+    assert "Say \"Next\"" not in footer
+
+    # When all files completed
+    complete_footer = format_export_progress_footer(20, 20)
+    assert "Export Complete" in complete_footer
+    assert "All <strong>20</strong> files have been successfully exported" in complete_footer
+    assert "btn-export-next" not in complete_footer
+
+
+def test_export_all_remaining_files_intent_and_execution():
+    """Verify that 'all files' or 'Export all remaining files' exports all remaining files in one turn."""
+    intent_all1 = detect_export_intent("all files", has_active_session=True)
+    assert intent_all1 is not None
+    assert intent_all1["is_continuation"] is True
+    assert intent_all1["export_all_remaining"] is True
+
+    intent_all2 = detect_export_intent("Export all remaining files", has_active_session=True)
+    assert intent_all2 is not None
+    assert intent_all2["export_all_remaining"] is True
+
+    intent_all3 = detect_export_intent("give all remaining file", has_active_session=True)
+    assert intent_all3 is not None
+    assert intent_all3["export_all_remaining"] is True
+
+    intent_next = detect_export_intent("Next", has_active_session=True)
+    assert intent_next is not None
+    assert intent_next["is_continuation"] is True
+    assert intent_next["export_all_remaining"] is False
+
+
+def test_export_all_remaining_files_graph_execution(temp_sample_repo):
+    """Verify that asking for 'all files' during an active session exports all remaining files immediately."""
+    graph = CodeRAGGraph()
+    repo_id = "test_repo"
+
+    # Mock manifest of 12 files
+    manifest = [
+        {"rel_path": f"src/file_{i}.py", "abs_path": str(temp_sample_repo / "src" / "api" / "main.py"), "language": "python", "is_pdf": False}
+        for i in range(12)
+    ]
+
+    session = {
+        "export_id": "exp_all_test",
+        "conversation_id": "conv_all_test",
+        "repo_id": repo_id,
+        "ordered_file_manifest": manifest,
+        "current_file_index": 5,
+        "total_file_count": 12,
+        "completed_files": [m["rel_path"] for m in manifest[:5]],
+        "pending_files": [m["rel_path"] for m in manifest[5:]],
+        "failed_files": [],
+        "export_status": "in_progress",
+        "tree_text": "```text\ntest_repo/\n```"
+    }
+
+    state = {
+        "question": "Export all remaining files",
+        "repo_id": repo_id,
+        "query_intent": "repo_code_export",
+        "export_session": session,
+        "export_info": {"is_continuation": True, "export_all_remaining": True}
+    }
+
+    with patch.object(graph.retriever.cloner, "get_repo_path", return_value=temp_sample_repo):
+        res = graph._generate_export_answer(state)
+        answer = res["answer"]
+        # Must contain all remaining files 6 through 12
+        for i in range(6, 13):
+            assert f"**File {i}:" in answer
+        # Must show complete footer
+        assert "Export Complete" in answer
+        assert "All <strong>12</strong> files have been successfully exported" in answer
+        assert session["current_file_index"] == 12
+        assert session["export_status"] == "completed"

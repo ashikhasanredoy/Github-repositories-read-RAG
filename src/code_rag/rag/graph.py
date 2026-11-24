@@ -1,9 +1,8 @@
 import re
-import os
 import time
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from langgraph.graph import StateGraph, END
 from src.code_rag.config import settings
 from src.code_rag.rag.state import CodeRAGState
@@ -14,6 +13,7 @@ from src.code_rag.rag.export_mode import (
     detect_export_intent,
     build_export_manifest_and_tree,
     sanitize_sensitive_content,
+    format_export_progress_footer,
     EXPORT_BATCH_SIZE
 )
 
@@ -827,7 +827,11 @@ User Question: {question}
                 parts.append(tree_text)
                 parts.append("\n\n---\n")
 
-        batch_size = total_files if total_files <= 6 else EXPORT_BATCH_SIZE
+        export_all = export_info.get("export_all_remaining", False)
+        if export_all:
+            batch_size = total_files - start_idx
+        else:
+            batch_size = total_files if total_files <= 6 else EXPORT_BATCH_SIZE
         end_idx = min(start_idx + batch_size, total_files)
         batch_files = manifest[start_idx:end_idx]
 
@@ -892,15 +896,7 @@ User Question: {question}
         session["failed_files"] = failed_files
         session["export_status"] = "completed" if end_idx >= total_files else "in_progress"
 
-        if new_pending:
-            parts.append(
-                f"\n\n---\n**[Export Progress: {end_idx} of {total_files} files exported. "
-                f"Say \"Next\", \"Continue\", or \"Baki code dao\" to export the next batch.]**\n"
-            )
-        else:
-            parts.append(
-                f"\n\n---\n**[Complete Repository Export Finished: All {total_files} files have been successfully exported.]**\n"
-            )
+        parts.append(format_export_progress_footer(end_idx, total_files, EXPORT_BATCH_SIZE))
 
         if self.sqlite_store:
             try:
@@ -1200,7 +1196,11 @@ User Question: {question}
                 if tree_text:
                     yield {"type": "token", "content": tree_text + "\n\n---\n"}
 
-            batch_size = total_files if total_files <= 6 else EXPORT_BATCH_SIZE
+            export_all = export_info.get("export_all_remaining", False)
+            if export_all:
+                batch_size = total_files - start_idx
+            else:
+                batch_size = total_files if total_files <= 6 else EXPORT_BATCH_SIZE
             end_idx = min(start_idx + batch_size, total_files)
             batch_files = manifest[start_idx:end_idx]
 
@@ -1270,16 +1270,10 @@ User Question: {question}
             session["failed_files"] = failed_files
             session["export_status"] = "completed" if end_idx >= total_files else "in_progress"
 
-            if new_pending:
-                yield {
-                    "type": "token",
-                    "content": f"\n\n---\n**[Export Progress: {end_idx} of {total_files} files exported. Say \"Next\", \"Continue\", or \"Baki code dao\" to export the next batch.]**\n"
-                }
-            else:
-                yield {
-                    "type": "token",
-                    "content": f"\n\n---\n**[Complete Repository Export Finished: All {total_files} files have been successfully exported.]**\n"
-                }
+            yield {
+                "type": "token",
+                "content": format_export_progress_footer(end_idx, total_files, EXPORT_BATCH_SIZE)
+            }
 
             if self.sqlite_store:
                 try:
@@ -1507,7 +1501,11 @@ User Question: {question}
                 if tree_text:
                     yield {"type": "token", "content": tree_text + "\n\n---\n"}
 
-            batch_size = total_files if total_files <= 6 else EXPORT_BATCH_SIZE
+            export_all = export_info.get("export_all_remaining", False)
+            if export_all:
+                batch_size = total_files - start_idx
+            else:
+                batch_size = total_files if total_files <= 6 else EXPORT_BATCH_SIZE
             end_idx = min(start_idx + batch_size, total_files)
             batch_files = manifest[start_idx:end_idx]
 
@@ -1577,16 +1575,10 @@ User Question: {question}
             session["failed_files"] = failed_files
             session["export_status"] = "completed" if end_idx >= total_files else "in_progress"
 
-            if new_pending:
-                yield {
-                    "type": "token",
-                    "content": f"\n\n---\n**[Export Progress: {end_idx} of {total_files} files exported. Say \"Next\", \"Continue\", or \"Baki code dao\" to export the next batch.]**\n"
-                }
-            else:
-                yield {
-                    "type": "token",
-                    "content": f"\n\n---\n**[Complete Repository Export Finished: All {total_files} files have been successfully exported.]**\n"
-                }
+            yield {
+                "type": "token",
+                "content": format_export_progress_footer(end_idx, total_files, EXPORT_BATCH_SIZE)
+            }
 
             if self.sqlite_store:
                 try:

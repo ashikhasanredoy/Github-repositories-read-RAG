@@ -27,6 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const themeToggleBtn = document.getElementById("themeToggleBtn");
     const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
     const sidebar = document.getElementById("sidebar");
+    const sidebarBackdrop = document.getElementById("sidebarBackdrop");
     const quickPasteLocalBtn = document.getElementById("quickPasteLocalBtn");
     const heroQuickIndexBtn = document.getElementById("heroQuickIndexBtn");
     const inputRepoLabel = document.getElementById("inputRepoLabel");
@@ -73,10 +74,14 @@ document.addEventListener("DOMContentLoaded", () => {
     async function init() {
         setupTheme();
         setupEventListeners();
-        await loadConversationsFromBackend();
-        await checkStatus();
-        await loadModels();
-        await loadRepos();
+        // Fast initial render: load conversations & active conversation immediately
+        loadConversationsFromBackend();
+        // Load background metadata concurrently without blocking the UI
+        Promise.allSettled([
+            checkStatus(),
+            loadModels(),
+            loadRepos()
+        ]).catch(err => console.warn("Background initializations warning:", err));
     }
 
     // =========================================================================
@@ -102,6 +107,70 @@ document.addEventListener("DOMContentLoaded", () => {
     const guideEmptySearch = document.getElementById("guideEmptySearch");
     const guideModalContent = document.getElementById("guideModalContent");
     const guideTabBtns = document.querySelectorAll(".guide-tab-btn");
+
+    // Dedicated Beautiful Error Modal Dialog Elements
+    const errorModalOverlay = document.getElementById("errorModalOverlay");
+    const errorModalCloseBtn = document.getElementById("errorModalCloseBtn");
+    const errorModalTitle = document.getElementById("errorModalTitle");
+    const errorModalLine1 = document.getElementById("errorModalLine1");
+    const errorModalLine2 = document.getElementById("errorModalLine2");
+    const errorModalEnteredUrl = document.getElementById("errorModalEnteredUrl");
+    const errorModalGuideBtn = document.getElementById("errorModalGuideBtn");
+    const errorModalFixBtn = document.getElementById("errorModalFixBtn");
+
+    function openErrorModal({
+        title = "Invalid Repository URL",
+        line1 = "The repository link you provided cannot be indexed.",
+        line2 = "Please provide a clean GitHub repository root URL without query parameters or extra text.",
+        enteredUrl = ""
+    }) {
+        if (!errorModalOverlay) return;
+        if (errorModalTitle) errorModalTitle.textContent = title;
+        if (errorModalLine1) errorModalLine1.textContent = line1;
+        if (errorModalLine2) errorModalLine2.textContent = line2;
+        if (errorModalEnteredUrl) {
+            errorModalEnteredUrl.textContent = enteredUrl || "Invalid URL";
+        }
+        errorModalOverlay.style.display = "flex";
+        requestAnimationFrame(() => {
+            errorModalOverlay.classList.add("active");
+            if (errorModalFixBtn) errorModalFixBtn.focus();
+        });
+    }
+
+    function closeErrorModal() {
+        if (!errorModalOverlay) return;
+        errorModalOverlay.classList.remove("active");
+        setTimeout(() => {
+            errorModalOverlay.style.display = "none";
+        }, 180);
+    }
+
+    if (errorModalCloseBtn) {
+        errorModalCloseBtn.addEventListener("click", closeErrorModal);
+    }
+    if (errorModalFixBtn) {
+        errorModalFixBtn.addEventListener("click", () => {
+            closeErrorModal();
+            if (repoSourceInput) {
+                repoSourceInput.focus();
+                repoSourceInput.select();
+            }
+        });
+    }
+    if (errorModalGuideBtn) {
+        errorModalGuideBtn.addEventListener("click", () => {
+            closeErrorModal();
+            openGuideModal();
+            const warningTab = document.querySelector('.guide-tab-btn[data-guide-tab="warnings"]');
+            if (warningTab) warningTab.click();
+        });
+    }
+    if (errorModalOverlay) {
+        errorModalOverlay.addEventListener("click", (e) => {
+            if (e.target === errorModalOverlay) closeErrorModal();
+        });
+    }
 
     function openGuideModal() {
         if (!guideModalOverlay) return;
@@ -430,11 +499,12 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        const fragment = document.createDocumentFragment();
         messages.forEach((m, idx) => {
             if (m.role === "user") {
-                appendMsg("user", m.content, idx, m.turn_id);
+                appendMsg("user", m.content, idx, m.turn_id, fragment);
             } else if (m.role === "assistant") {
-                const row = appendMsg("bot", "", idx, m.turn_id);
+                const row = appendMsg("bot", "", idx, m.turn_id, fragment);
                 const bubble = row.querySelector(".msg-bubble");
                 const textDiv = document.createElement("div");
                 textDiv.className = "markdown-body";
@@ -444,8 +514,16 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
+        chatContainer.appendChild(fragment);
         chatContainer.scrollTop = chatContainer.scrollHeight;
         updateScrollState();
+    }
+
+    function closeMobileSidebar() {
+        if (window.innerWidth <= 900 && sidebar) {
+            sidebar.classList.remove("open");
+            if (sidebarBackdrop) sidebarBackdrop.classList.remove("active");
+        }
     }
 
     function startNewConversation(shouldToast = true) {
@@ -462,6 +540,7 @@ document.addEventListener("DOMContentLoaded", () => {
             chatContainer.appendChild(welcomeHero);
         }
         renderConversationsList();
+        closeMobileSidebar();
         if (queryInput) {
             queryInput.value = "";
             queryInput.style.height = "auto";
@@ -476,7 +555,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function selectConversation(convId) {
-        if (activeConvId === convId) return;
+        if (activeConvId === convId) {
+            closeMobileSidebar();
+            return;
+        }
         if (isSubmitting && currentAbortController) {
             currentAbortController.abort();
             currentAbortController = null;
@@ -486,6 +568,7 @@ document.addEventListener("DOMContentLoaded", () => {
         activeConvId = convId;
         localStorage.setItem("coderag_active_conv_id", activeConvId);
         renderConversationsList();
+        closeMobileSidebar();
         await loadConversationMessages(activeConvId);
     }
 
@@ -501,30 +584,65 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         if (!confirmed) return;
 
+        // 1. If currently streaming for this conversation, abort immediately
+        const wasActive = (activeConvId === convId);
+        if (wasActive && isSubmitting && currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
+            isSubmitting = false;
+        }
+        if (wasActive) {
+            queryQueue = [];
+        }
+
+        // 2. Identify the next conversation to switch to before modifying the list
+        const deletedIndex = conversations.findIndex(c => (c.conversation_id || c.id) === convId);
+        let nextConvId = null;
+        if (wasActive && conversations.length > 1) {
+            if (deletedIndex >= 0 && deletedIndex < conversations.length - 1) {
+                const nextConv = conversations[deletedIndex + 1];
+                nextConvId = nextConv.conversation_id || nextConv.id;
+            } else if (deletedIndex > 0) {
+                const prevConv = conversations[deletedIndex - 1];
+                nextConvId = prevConv.conversation_id || prevConv.id;
+            }
+        }
+
+        // 3. Optimistically update local array and UI DOM instantly (<16ms, zero freeze!)
+        conversations = conversations.filter(c => (c.conversation_id || c.id) !== convId);
+        const itemEl = conversationsList ? conversationsList.querySelector(`.conv-item[data-conv-id="${convId}"]`) : null;
+        if (itemEl) {
+            itemEl.remove();
+        }
+        if (conversations.length === 0 && conversationsList) {
+            conversationsList.innerHTML = `<div class="conversations-empty">No previous chats yet</div>`;
+        }
+
+        // 4. If the active conversation was deleted, switch immediately
+        if (wasActive) {
+            activeConvId = null;
+            localStorage.removeItem("coderag_active_conv_id");
+            if (nextConvId) {
+                selectConversation(nextConvId);
+            } else {
+                startNewConversation(false);
+            }
+        }
+
+        showToast("Conversation deleted", "info", 2000);
+
+        // 5. Send backend deletion asynchronously in the background
         try {
             const res = await fetch(`/api/conversations/${encodeURIComponent(convId)}`, {
                 method: "DELETE"
             });
-            if (res.ok) {
-                showToast("Conversation deleted", "info", 2000);
-                if (activeConvId === convId) {
-                    activeConvId = null;
-                    localStorage.removeItem("coderag_active_conv_id");
-                }
+            if (!res.ok) {
+                console.warn("Server reported issue during deletion:", res.status);
                 await fetchConversationsList();
-                if (!activeConvId) {
-                    if (conversations.length > 0) {
-                        selectConversation(conversations[0].conversation_id || conversations[0].id);
-                    } else {
-                        startNewConversation(false);
-                    }
-                }
-            } else {
-                showToast("Failed to delete conversation", "error");
             }
         } catch (err) {
-            console.error("Error deleting conversation:", err);
-            showToast("Error deleting conversation", "error");
+            console.error("Background error deleting conversation on server:", err);
+            await fetchConversationsList();
         }
     }
 
@@ -567,11 +685,14 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        const fragment = document.createDocumentFragment();
         conversations.forEach(c => {
             const cid = c.conversation_id || c.id;
             const item = document.createElement("div");
             item.className = `conv-item ${cid === activeConvId ? "active" : ""}`;
+            item.dataset.convId = cid;
             const displayTitle = c.title || "New Chat";
+            item.dataset.convTitle = displayTitle;
 
             item.innerHTML = `
                 <div class="conv-main">
@@ -592,19 +713,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     </button>
                 </div>
             `;
-
-            item.addEventListener("click", () => selectConversation(cid));
-            const renBtn = item.querySelector(".btn-rename-conv");
-            if (renBtn) {
-                renBtn.addEventListener("click", (e) => renameConversation(cid, displayTitle, e));
-            }
-            const delBtn = item.querySelector(".btn-delete-conv");
-            if (delBtn) {
-                delBtn.addEventListener("click", (e) => deleteConversation(cid, e));
-            }
-
-            conversationsList.appendChild(item);
+            fragment.appendChild(item);
         });
+        conversationsList.appendChild(fragment);
     }
 
     let currentModel = "llama3.2:latest";
@@ -617,24 +728,46 @@ document.addEventListener("DOMContentLoaded", () => {
         if (newChatBtn) {
             newChatBtn.addEventListener("click", (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 startNewConversation(true);
             });
         }
         if (navNewChatBtn) {
             navNewChatBtn.addEventListener("click", (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 startNewConversation(true);
             });
         }
 
-        // Delegated click listener for any new chat button
-        document.addEventListener("click", (e) => {
-            const btn = e.target.closest("#navNewChatBtn, #newChatBtn, .nav-new-chat-btn, .btn-new-chat");
-            if (btn) {
-                e.preventDefault();
-                startNewConversation(true);
-            }
-        });
+        // Delegated click listener for conversation list items (select, rename, delete)
+        if (conversationsList) {
+            conversationsList.addEventListener("click", (e) => {
+                const delBtn = e.target.closest(".btn-delete-conv");
+                if (delBtn) {
+                    e.stopPropagation();
+                    const item = delBtn.closest(".conv-item");
+                    if (item && item.dataset.convId) {
+                        deleteConversation(item.dataset.convId, e);
+                    }
+                    return;
+                }
+                const renBtn = e.target.closest(".btn-rename-conv");
+                if (renBtn) {
+                    e.stopPropagation();
+                    const item = renBtn.closest(".conv-item");
+                    if (item && item.dataset.convId) {
+                        const title = item.dataset.convTitle || "New Chat";
+                        renameConversation(item.dataset.convId, title, e);
+                    }
+                    return;
+                }
+                const item = e.target.closest(".conv-item");
+                if (item && item.dataset.convId) {
+                    selectConversation(item.dataset.convId);
+                }
+            });
+        }
 
         // Quick paste local repo buttons
         if (quickPasteLocalBtn) {
@@ -678,17 +811,44 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Sidebar toggle (desktop & mobile)
+        // Sidebar toggle (desktop & mobile) with robust state & backdrop management
         if (sidebarToggleBtn) {
             sidebarToggleBtn.addEventListener("click", () => {
                 if (window.innerWidth <= 900) {
-                    sidebar.classList.toggle("open");
+                    sidebar.classList.remove("collapsed");
+                    const willOpen = !sidebar.classList.contains("open");
+                    sidebar.classList.toggle("open", willOpen);
+                    if (sidebarBackdrop) sidebarBackdrop.classList.toggle("active", willOpen);
                 } else {
+                    sidebar.classList.remove("open");
+                    if (sidebarBackdrop) sidebarBackdrop.classList.remove("active");
                     const isCollapsed = sidebar.classList.toggle("collapsed");
                     localStorage.setItem("coderag_sidebar_collapsed", isCollapsed ? "true" : "false");
                 }
             });
         }
+
+        // Mobile backdrop tap to dismiss sidebar
+        if (sidebarBackdrop) {
+            sidebarBackdrop.addEventListener("click", () => {
+                closeMobileSidebar();
+            });
+        }
+
+        // Window resize handler: seamlessly adapt between mobile drawer and desktop sidebar
+        window.addEventListener("resize", () => {
+            if (window.innerWidth > 900) {
+                sidebar.classList.remove("open");
+                if (sidebarBackdrop) sidebarBackdrop.classList.remove("active");
+                if (localStorage.getItem("coderag_sidebar_collapsed") === "true") {
+                    sidebar.classList.add("collapsed");
+                } else {
+                    sidebar.classList.remove("collapsed");
+                }
+            } else {
+                sidebar.classList.remove("collapsed");
+            }
+        });
 
         // Global shortcut Ctrl+B / Cmd+B to toggle sidebar, Ctrl+N / Alt+N to new chat, F1 / ? to open guide
         document.addEventListener("keydown", (e) => {
@@ -837,7 +997,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================================================
     // Toast Notification System
     // =========================================================================
+    let lastToastMessage = "";
+    let lastToastTime = 0;
+
     function showToast(message, type = "info", duration = 4000) {
+        const now = Date.now();
+        if (message === lastToastMessage && now - lastToastTime < 500) {
+            return;
+        }
+        lastToastMessage = message;
+        lastToastTime = now;
+
         const toast = document.createElement("div");
         toast.className = `toast toast-${type}`;
 
@@ -1055,10 +1225,52 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } catch (err) {
             clearInterval(progressInterval);
+            
+            const rawMsg = err.message || "";
+            let userFriendlyLine1 = "The repository link you provided cannot be indexed.";
+            let userFriendlyLine2 = "Please provide a clean GitHub repository root URL like https://github.com/owner/repository.";
+
+            if (rawMsg.includes("?tab=") || rawMsg.includes("query parameters") || source.includes("?")) {
+                userFriendlyLine1 = "The URL contains query parameters (?tab=...) which cannot be indexed.";
+                userFriendlyLine2 = "Remove '?tab=...' and use a clean link like https://github.com/owner/repository.";
+            } else if (rawMsg.includes("chatgpt") || source.toLowerCase().includes("chatgpt")) {
+                userFriendlyLine1 = "The URL contains appended text or external domain references (.chatgpt).";
+                userFriendlyLine2 = "Remove '.chatgpt' and use only the repository URL: https://github.com/owner/repository.";
+            } else if (rawMsg.includes("/tree/") || rawMsg.includes("/blob/")) {
+                userFriendlyLine1 = "The URL points to a subfolder or individual file view (/tree/ or /blob/).";
+                userFriendlyLine2 = "Please provide the root repository URL: https://github.com/owner/repository.";
+            } else if (rawMsg.includes("both owner and repository name")) {
+                userFriendlyLine1 = "The URL only contains a username profile, not a specific repository.";
+                userFriendlyLine2 = "Please provide a full repository URL like https://github.com/owner/repository.";
+            } else if (rawMsg.includes("not found") || rawMsg.includes("not valid") || rawMsg.includes("is this a git repository")) {
+                userFriendlyLine1 = "Git could not locate a valid repository at this address.";
+                userFriendlyLine2 = "Verify the repository exists, is public, and matches https://github.com/owner/repository.";
+            } else if (rawMsg.includes("Authentication required") || rawMsg.includes("authentication failed")) {
+                userFriendlyLine1 = "Authentication required for this private repository.";
+                userFriendlyLine2 = "Please use an authenticated token URL or SSH URL.";
+            }
+
+            // 1. Simple, clean 1-2 lines in the sidebar (no raw ugly git stack traces!)
             ingestAlert.className = "alert-box error";
-            ingestAlert.innerHTML = `<strong>❌ Error:</strong> ${escapeHtml(err.message)}`;
+            ingestAlert.innerHTML = `
+                <div style="font-size:0.815rem;line-height:1.45;">
+                    <strong style="color:var(--accent-rose);display:block;margin-bottom:3px;">❌ Invalid Repository URL</strong>
+                    <span>${escapeHtml(userFriendlyLine1)}</span><br>
+                    <span style="opacity:0.85;font-size:0.775rem;">${escapeHtml(userFriendlyLine2)}</span>
+                </div>
+            `;
             ingestAlert.style.display = "block";
-            showToast(err.message, "error");
+
+            // 2. Open beautiful popup modal window with full explanation & quick fix button
+            openErrorModal({
+                title: "Invalid Repository URL",
+                line1: userFriendlyLine1,
+                line2: userFriendlyLine2,
+                enteredUrl: source
+            });
+
+            // 3. Simple 1-line toast notification
+            showToast("Invalid repository URL. Clean GitHub link required.", "error", 4000);
         } finally {
             ingestBtnText.textContent = "Index Repository";
             ingestSpinner.style.display = "none";
@@ -1311,7 +1523,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================================================
     // Rendering & Helpers
     // =========================================================================
-    function appendMsg(type, textOrHtml, msgIndex = null, turnId = null) {
+    function appendMsg(type, textOrHtml, msgIndex = null, turnId = null, targetContainer = null) {
         const row = document.createElement("div");
         row.className = `msg-row ${type}`;
         if (msgIndex !== null && msgIndex !== undefined) {
@@ -1391,8 +1603,9 @@ document.addEventListener("DOMContentLoaded", () => {
             row.innerHTML = `<div class="msg-bubble">${textOrHtml}</div>`;
         }
 
-        chatContainer.appendChild(row);
-        if (type === "user" || autoScrollEnabled) {
+        const parent = targetContainer || chatContainer;
+        parent.appendChild(row);
+        if (parent === chatContainer && (type === "user" || autoScrollEnabled)) {
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
         return row;
@@ -1789,6 +2002,28 @@ document.addEventListener("DOMContentLoaded", () => {
                 }, 2200);
             } catch (err) {
                 showToast("Failed to download file", "error");
+            }
+            return;
+        }
+
+        // Export Progress Action Buttons (Next Batch & Export All Remaining)
+        const exportActionBtn = e.target.closest(".btn-export-action");
+        if (exportActionBtn) {
+            const action = exportActionBtn.dataset.exportAction;
+            // Prevent multiple clicks by disabling all buttons in the card
+            const card = exportActionBtn.closest(".export-progress-card");
+            if (card) {
+                card.querySelectorAll(".btn-export-action").forEach(btn => {
+                    btn.disabled = true;
+                    btn.style.opacity = "0.55";
+                    btn.style.pointerEvents = "none";
+                });
+            }
+
+            if (action === "all") {
+                submitUserQuery("Export all remaining files");
+            } else {
+                submitUserQuery("Next");
             }
             return;
         }

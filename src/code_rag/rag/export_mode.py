@@ -1,10 +1,8 @@
 import os
 import re
-import json
-import time
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Set
+from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger("code_rag.rag.export_mode")
 
@@ -104,12 +102,28 @@ def detect_export_intent(
         r"^(?:next\s+batch|continue\s+export|resume\s+export|baki\s+gulo\s+dao|aar\s+baki\s+code)$",
         r"^continue\s+(?:the\s+)?(?:remaining|pending|next)\s*(?:code|files)?$"
     ]
+    all_remaining_patterns = [
+        r"^(?:all\s+files?|export\s+all|export\s+all\s+files?|export\s+all\s+remaining\s+files?|give\s+all\s+remaining\s+files?|give\s+all\s+files?|all\s+remaining\s+files?|all\s+remaining\s+code|all\s+remaining|give\s+remaining|all)$",
+        r"^(?:baki\s+shob\s+(?:code|files?)(?:\s+(?:dao|din))?|shob\s+code\s+dao|shob\s+file\s+dao|baki\s+gulo\s+shob\s+dao)$",
+        r"^export\s+all\s+(?:remaining|pending)\s*(?:code|files)?$",
+        r"^(?:give\s+me\s+)?all\s+(?:the\s+)?remaining\s+(?:files?|code)$"
+    ]
     if has_active_session:
+        for pat in all_remaining_patterns:
+            if re.match(pat, q_clean):
+                return {
+                    "is_export": True,
+                    "is_continuation": True,
+                    "export_all_remaining": True,
+                    "readme_and_pdf_only": False,
+                    "exclude_media": True
+                }
         for pat in continuation_patterns:
             if re.match(pat, q_clean):
                 return {
                     "is_export": True,
                     "is_continuation": True,
+                    "export_all_remaining": False,
                     "readme_and_pdf_only": False,
                     "exclude_media": True
                 }
@@ -352,3 +366,52 @@ def build_export_manifest_and_tree(
     tree_text = "```text\n" + "\n".join(lines) + "\n```"
 
     return tree_text, ordered_manifest
+
+
+def format_export_progress_footer(end_idx: int, total_files: int, next_batch_size: int = 5) -> str:
+    """
+    Builds the interactive HTML progress card for export mode.
+    Includes visual progress bar, file counts, and action buttons:
+    - Next: automatically requests the next batch of 5 files.
+    - All Files: automatically requests all remaining files.
+    """
+    if end_idx >= total_files:
+        return (
+            f"\n\n---\n"
+            f'<div class="export-progress-card export-complete-card">\n'
+            f'  <div class="export-progress-header">\n'
+            f'    <div class="export-progress-badge success">\n'
+            f'      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>\n'
+            f'      <span>Export Complete</span>\n'
+            f'    </div>\n'
+            f'    <div class="export-progress-count">All <strong>{total_files}</strong> files have been successfully exported.</div>\n'
+            f'  </div>\n'
+            f'  <div class="export-progress-bar"><div class="export-progress-fill success" style="width: 100%;"></div></div>\n'
+            f'</div>\n'
+        )
+
+    remaining = total_files - end_idx
+    next_count = min(next_batch_size, remaining)
+    percent = int((end_idx / total_files) * 100) if total_files > 0 else 0
+    return (
+        f"\n\n---\n"
+        f'<div class="export-progress-card">\n'
+        f'  <div class="export-progress-header">\n'
+        f'    <div class="export-progress-badge">\n'
+        f'      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>\n'
+        f'      <span>Export Progress</span>\n'
+        f'    </div>\n'
+        f'    <div class="export-progress-count"><strong>{end_idx}</strong> of <strong>{total_files}</strong> files exported ({percent}%)</div>\n'
+        f'  </div>\n'
+        f'  <div class="export-progress-bar"><div class="export-progress-fill" style="width: {percent}%;"></div></div>\n'
+        f'  <div class="export-action-btns">\n'
+        f'    <button type="button" class="btn-export-action btn-export-next" data-export-action="next">\n'
+        f'      <span>Next ({next_count} Files)</span>\n'
+        f'    </button>\n'
+        f'    <button type="button" class="btn-export-action btn-export-all" data-export-action="all">\n'
+        f'      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>\n'
+        f'      <span>All Files ({remaining} Remaining)</span>\n'
+        f'    </button>\n'
+        f'  </div>\n'
+        f'</div>\n'
+    )

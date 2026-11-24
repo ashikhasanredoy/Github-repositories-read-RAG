@@ -3,7 +3,7 @@ import json
 import asyncio
 import logging
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -59,6 +59,8 @@ sqlite_store = SQLiteStore()
 retriever = HybridRetriever(vector_store=vector_store, bm25_store=bm25_store, cloner=cloner)
 rag_graph = CodeRAGGraph(retriever=retriever, ollama_service=ollama_service)
 rag_pipeline = rag_graph.build()
+
+active_stream_cancellations: dict = {}
 
 @app.get("/", include_in_schema=False)
 async def serve_ui():
@@ -125,6 +127,9 @@ async def index_repository(req: IndexRepoRequest):
         )
     except HTTPException:
         raise
+    except ValueError as val_err:
+        logger.warning("Validation error during repository indexing: %s", val_err)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
     except Exception as err:
         logger.error("Error during repository indexing: %s", err)
         raise HTTPException(status_code=500, detail=str(err))
@@ -152,8 +157,12 @@ async def list_conversations():
     )
 
 @app.get("/api/conversations/{conversation_id}", response_model=ConversationDetailResponse, tags=["Conversations"])
-async def get_conversation(conversation_id: str):
-    conv = await asyncio.to_thread(sqlite_store.get_conversation, conversation_id)
+async def get_conversation(
+    conversation_id: str,
+    limit: int = Query(None, description="Optional maximum messages to retrieve"),
+    offset: int = Query(0, description="Offset for pagination")
+):
+    conv = await asyncio.to_thread(sqlite_store.get_conversation, conversation_id, limit=limit, offset=offset)
     if not conv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Conversation '{conversation_id}' not found")
 
@@ -223,6 +232,10 @@ async def delete_turn(conversation_id: str, turn_id: str):
 
 @app.delete("/api/conversations/{conversation_id}", response_model=DeleteConversationResponse, tags=["Conversations"])
 async def delete_conversation(conversation_id: str):
+    cancel_event = active_stream_cancellations.get(conversation_id)
+    if cancel_event:
+        cancel_event.set()
+
     success = await asyncio.to_thread(sqlite_store.delete_conversation, conversation_id)
     if not success:
         raise HTTPException(
@@ -368,6 +381,9 @@ async def query_repository_stream(req: QueryRequest):
         "trace_steps": []
     }
 
+    cancel_event = asyncio.Event()
+    active_stream_cancellations[conv_id] = cancel_event
+
     async def event_stream():
         accumulated_answer = []
         sources = []
@@ -379,6 +395,9 @@ async def query_repository_stream(req: QueryRequest):
             yield f"data: {json.dumps({'type': 'meta', 'conversation_id': conv_id, 'turn_id': turn_id})}\n\n"
 
             async for item in rag_graph.stream_rag_async(initial_state):
+                if cancel_event.is_set():
+                    logger.info("Stream cancelled via cancellation event for conv %s.", conv_id)
+                    break
                 if item.get("type") == "token":
                     accumulated_answer.append(item.get("content", ""))
                 elif item.get("type") == "done":
@@ -390,7 +409,7 @@ async def query_repository_stream(req: QueryRequest):
 
                 yield f"data: {json.dumps(item)}\n\n"
 
-            if stream_completed_normally:
+            if stream_completed_normally and not cancel_event.is_set():
                 full_answer = "".join(accumulated_answer)
                 # Save completed response to existing assistant message (safe against deletion)
                 await asyncio.to_thread(
@@ -429,6 +448,8 @@ async def query_repository_stream(req: QueryRequest):
                 model_name=req.model_name or ollama_service.get_active_model()
             )
             yield f"data: {json.dumps({'type': 'error', 'error': str(err)})}\n\n"
+        finally:
+            active_stream_cancellations.pop(conv_id, None)
 
     return StreamingResponse(
         event_stream(),

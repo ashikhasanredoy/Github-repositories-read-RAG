@@ -157,3 +157,24 @@ def test_fastapi_endpoints():
     # Verify conversation gone
     res = client.get(f"/api/conversations/{conv_id}")
     assert res.status_code == 404
+
+def test_rapid_concurrent_conversation_deletion(temp_db):
+    """Test rapid creation and deletion of multiple conversations to ensure no lock contention."""
+    import time
+    for i in range(15):
+        cid = f"rapid_conv_{i}"
+        tid = f"rapid_turn_{i}"
+        temp_db.create_or_get_conversation(cid, title=f"Rapid {i}")
+        temp_db.create_turn(cid, tid)
+        temp_db.add_user_message(cid, tid, f"Question {i}")
+        temp_db.create_pending_assistant_message(cid, tid, "code")
+        temp_db.update_assistant_message(cid, tid, f"Answer {i}", [], model_name="llama3.2")
+
+    start_time = time.time()
+    for i in range(15):
+        cid = f"rapid_conv_{i}"
+        deleted = temp_db.delete_conversation(cid)
+        assert deleted is True
+    duration = time.time() - start_time
+    # 15 deletions with cascades should execute in well under 1 second
+    assert duration < 1.0

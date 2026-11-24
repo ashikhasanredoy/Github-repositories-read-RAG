@@ -337,7 +337,13 @@ class ConversationHandler:
 
         # 1. Active workflow and export continuation
         has_active_export = bool(active_session and active_session.get("pending_files"))
-        if t_clean in {"next", "continue", "পরেরটা", "পরের কোড দাও", "baki code dao"}:
+        is_all_files_phrase = t_clean in {
+            "all file", "all files", "export all", "export all files", "export all remaining files",
+            "all remaining files", "all remaining code", "give all remaining files", "give all remaining file",
+            "give all files", "all remaining", "give remaining", "baki shob file", "baki shob code",
+            "shob code dao", "shob file dao"
+        }
+        if t_clean in {"next", "continue", "পরেরটা", "পরের কোড দাও", "baki code dao"} or is_all_files_phrase:
             if has_active_export:
                 return {
                     "type": "export_continuation",

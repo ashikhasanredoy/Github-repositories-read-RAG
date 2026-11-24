@@ -1,4 +1,3 @@
-import os
 import re
 import json
 import shutil
@@ -11,8 +10,8 @@ from src.code_rag.config import settings
 logger = logging.getLogger(__name__)
 
 class RepoCloner:
-    def __init__(self, repos_dir: Optional[Path] = None):
-        self.repos_dir = repos_dir or settings.REPOS_DIR
+    def __init__(self, repos_dir: Optional[Any] = None):
+        self.repos_dir = Path(repos_dir) if repos_dir else settings.REPOS_DIR
         self.registry_file = settings.DATA_DIR / "repo_paths.json"
 
     def _load_registry(self) -> Dict[str, str]:
@@ -68,6 +67,40 @@ class RepoCloner:
 
     def clone_or_load(self, source: str, force_reclone: bool = False) -> Dict[str, Any]:
         is_remote = source.startswith(("http://", "https://", "git@"))
+        if is_remote and ("github.com" in source.lower()):
+            clean_s = source.strip()
+            if "?" in clean_s or "#" in clean_s:
+                raise ValueError(
+                    f"Malformed GitHub URL: '{source}'. "
+                    "Please provide a clean repository root URL (e.g. 'https://github.com/owner/repo') "
+                    "without query parameters (such as '?tab=...') or fragments."
+                )
+            if "chatgpt" in clean_s.lower():
+                raise ValueError(
+                    f"Malformed GitHub URL: '{source}'. "
+                    "Please provide a clean repository root URL (e.g. 'https://github.com/owner/repo') "
+                    "without appended external domains or keywords (such as '.chatgpt')."
+                )
+            m = re.match(r"^https?://(?:[^@:]+:[^@:]+@)?(?:www\.)?github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?/?$", clean_s)
+            ssh_m = re.match(r"^git@github\.com:([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?$", clean_s)
+            if not m and not ssh_m:
+                if any(x in clean_s.lower() for x in ["/tree/", "/blob/", "/commit/", "/pull/", "/issues"]):
+                    raise ValueError(
+                        f"Malformed GitHub URL: '{source}'. "
+                        "Please provide a clean repository root URL (e.g. 'https://github.com/owner/repo') "
+                        "without trailing subpaths or file views (such as '/tree/main' or '/blob/main')."
+                    )
+                parts = [p for p in clean_s.split("github.com/")[-1].split("/") if p]
+                if len(parts) < 2:
+                    raise ValueError(
+                        f"Malformed GitHub URL: '{source}'. "
+                        "A valid GitHub repository URL must include both owner and repository name (e.g. 'https://github.com/owner/repo')."
+                    )
+                raise ValueError(
+                    f"Malformed GitHub URL: '{source}'. "
+                    f"Please provide a clean repository root URL like 'https://github.com/{parts[0]}/{parts[1]}'."
+                )
+
         repo_name = self.sanitize_repo_name(source)
         target_path = self.repos_dir / repo_name
 
@@ -94,7 +127,21 @@ class RepoCloner:
                 git.Repo.clone_from(source, str(target_path), depth=1)
             except Exception as err:
                 shutil.rmtree(target_path, ignore_errors=True)
-                raise RuntimeError(f"Git clone failed for {source}: {err}") from err
+                raw_err = str(err)
+                if "not valid: is this a git repository" in raw_err.lower() or "repository not found" in raw_err.lower() or "exit code(128)" in raw_err.lower():
+                    raise RuntimeError(
+                        f"Repository not found or invalid: '{source}'. "
+                        "Please verify the repository exists, is public, and the URL is clean."
+                    ) from err
+                elif "authentication failed" in raw_err.lower() or "could not read username" in raw_err.lower():
+                    raise RuntimeError(
+                        f"Authentication required for '{source}'. "
+                        "For private repositories, use an authenticated token URL or SSH URL."
+                    ) from err
+                else:
+                    raise RuntimeError(
+                        f"Could not clone repository '{source}'. Please check the URL and network connection."
+                    ) from err
 
         self.save_repo_path(repo_name, str(target_path))
         return {
